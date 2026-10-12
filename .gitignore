@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.env*
+!.env.example
+artifacts/
+data/
+backend/data/
+backend/*.exe
+agent/agent-state/
+agent/*.exe
+agent.token
+*.pem

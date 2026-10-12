@@ -1,0 +1,30 @@
+"use client";
+
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Copy, Download, ArrowUpRight } from "lucide-react";
+import { processes, memoryLabel, csv, download, type Process } from "@/lib/demo";
+import { useMonitor } from "./provider";
+import { Empty, Modal, PageHeading, PageMotion, Panel, SearchInput, Skeleton } from "./ui";
+import { OfflineBanner } from "./connection";
+import { ProcessIcon } from './icons';
+import { sortProcesses, intervalLabel, type SortField } from '@/lib/monitor';
+
+export function ProcessTable({ preview = false, query = "", sortBy }: { preview?: boolean; query?: string; sortBy?: SortField }) {
+  const { server, tick, notify, snapshot } = useMonitor();
+  const [sort, setSort] = useState<SortField>(sortBy ?? 'cpu');
+  const [descending, setDescending] = useState(sortBy !== 'name');
+  const [detail, setDetail] = useState<Process | null>(null);
+  const values = snapshot?.processes ?? processes(server,tick);
+  const filtered = sortProcesses(values.filter(p=>`${p.name} ${p.pid} ${p.user}`.toLowerCase().includes(query.toLowerCase())),sort,descending);
+  const rows = preview ? filtered.slice(0,4) : filtered;
+  function changeSort(field: typeof sort) { if (field === sort) setDescending(v => !v); else { setSort(field); setDescending(field !== "name"); } }
+  return <>{rows.length ? <div className="table-scroll"><table className="process-table"><thead><tr>{[{ label: "Процесс", key: "name" }, { label: "PID", key: "pid" }, { label: "CPU", key: "cpu" }, { label: "Память", key: "memory" }, { label: "GPU", key: "gpu" }, { label: "VRAM", key: "gpuMemory" }].map(item => <th key={item.key} aria-sort={sort === item.key ? descending ? "descending" : "ascending" : "none"}><button onClick={() => changeSort(item.key as typeof sort)}>{item.label}{sort === item.key ? descending ? <ArrowDown size={12} /> : <ArrowUp size={12} /> : null}</button></th>)}<th>Пользователь</th><th><span className="sr-only">Подробности</span></th></tr></thead><tbody>{rows.map(process => <tr key={process.pid}><td><button className="process-name" onClick={() => setDetail(process)}><ProcessIcon name={process.name} /><span>{process.name}</span></button></td><td className="mono muted">{process.pid}</td><td><div className="process-cpu"><span className="mono">{process.cpu.toFixed(1)}%</span><div className="usage-track"><span style={{ transform: `scaleX(${Math.min(1, process.cpu / 35)})` }} /></div></div></td><td className="mono muted">{memoryLabel(process.memory)}</td><td className="mono muted">{process.gpu == null ? "—" : `${process.gpu.toFixed(1)}%`}</td><td className="mono muted">{process.gpuMemory == null ? "—" : memoryLabel(process.gpuMemory)}</td><td className="muted">{process.user}</td><td><button className="icon-button row-action" onClick={() => setDetail(process)} aria-label={`Подробности процесса ${process.name}`}><ArrowUpRight size={15} /></button></td></tr>)}</tbody></table></div> : <Empty title={server.online ? "Процессы не найдены" : "Нет данных о процессах"} text={server.online ? "Измените имя, PID или пользователя в поиске." : "Сервер недоступен. Выберите другой сервер."} />}
+    {detail ? <Modal title={detail.name} subtitle={`Процесс ${detail.pid} · ${server.name}`} onClose={() => setDetail(null)}><div className="drawer-body"><div className="detail-icon"><ProcessIcon name={detail.name} /></div><dl className="detail-grid"><div><dt>PID</dt><dd className="mono">{detail.pid}</dd></div><div><dt>Пользователь</dt><dd>{detail.user}</dd></div><div><dt>CPU</dt><dd>{detail.cpu.toFixed(1)}%</dd></div><div><dt>Память</dt><dd>{memoryLabel(detail.memory)}</dd></div><div><dt>GPU</dt><dd>{detail.gpu == null ? "—" : `${detail.gpu.toFixed(1)}%`}</dd></div><div><dt>Видеопамять</dt><dd>{detail.gpuMemory == null ? "—" : memoryLabel(detail.gpuMemory)}</dd></div><div><dt>Состояние</dt><dd>{detail.status}</dd></div><div><dt>Источник</dt><dd>Демоданные</dd></div></dl><div className="form-section"><h3>Команда запуска</h3><code className="command-code">{detail.command}</code><button className="button" onClick={async () => { try { await navigator.clipboard.writeText(detail.command); notify("Команда скопирована"); } catch { notify("Копирование недоступно. Выделите команду вручную."); } }}><Copy size={15} />Копировать</button></div></div><div className="modal-footer"><button className="button button-primary" onClick={() => setDetail(null)}>Закрыть</button></div></Modal> : null}</>;
+}
+
+export function Processes() {
+  const { server, tick, loading, notify, snapshot, preferences } = useMonitor();
+  const [query, setQuery] = useState("");
+  const rows = snapshot?.processes ?? processes(server, tick);
+  return <PageMotion><PageHeading title="Процессы" subtitle="Каждый процесс. Каждая доля ресурса." actions={<button className="button" disabled={loading || !server.online} onClick={() => { download(`${server.name}-processes.csv`, csv([["Process", "PID", "CPU %", "Memory MB", "GPU %", "VRAM MB", "User"], ...rows.map(p => [p.name, p.pid, p.cpu.toFixed(1), p.memory, p.gpu ?? "", p.gpuMemory ?? "", p.user])])); notify("Процессы экспортированы"); }}><Download size={16} />Экспорт</button>} /><OfflineBanner />{loading ? <Skeleton /> : <><div className="summary-strip reveal"><div><span>Всего процессов</span><strong>{rows.length}</strong></div><div><span>CPU процессов</span><strong>{rows.reduce((n, p) => n + p.cpu, 0).toFixed(1)}%</strong></div><div><span>Память процессов</span><strong>{memoryLabel(rows.reduce((n, p) => n + p.memory, 0))}</strong></div><div><span>Обновление</span><strong>{intervalLabel(preferences.interval)} <small>· {server.source === "agent" ? "агент" : "демо"}</small></strong></div></div><Panel className="full-table-panel"><div className="table-toolbar"><h2>Активные процессы</h2><SearchInput label="Имя, PID или пользователь" value={query} onChange={setQuery} /></div><ProcessTable query={query} /><div className="table-foot">Сортировка по текущим значениям. Нажмите заголовок столбца, чтобы изменить направление.</div></Panel></>}</PageMotion>;
+}

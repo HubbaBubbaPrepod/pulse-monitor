@@ -1,0 +1,23 @@
+[Unit]
+Description=Pulse server monitoring panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pulse
+Group=pulse
+WorkingDirectory=/opt/pulse
+ExecStart=/opt/pulse/pulse-monitor -addr 0.0.0.0:8443 -data /var/lib/pulse -static /opt/pulse/out -tls-cert /etc/pulse/fullchain.pem -tls-key /etc/pulse/privkey.pem -public-url https://monitor.example.com:8443
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/pulse
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
