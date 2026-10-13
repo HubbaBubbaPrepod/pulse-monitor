@@ -64,14 +64,11 @@ func newApp(dir string) (*app, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
-	a := &app{dir: dir, started: time.Now().UTC(), servers: demoServers()}
+	a := &app{dir: dir, started: time.Now().UTC(), servers: []server{}}
 	raw, err := os.ReadFile(filepath.Join(dir, "servers.json"))
 	if err == nil {
 		if err := json.Unmarshal(raw, &a.servers); err != nil {
 			return nil, fmt.Errorf("read server definitions: %w", err)
-		}
-		if len(a.servers) == 0 {
-			return nil, errors.New("server definitions cannot be empty")
 		}
 		for _, s := range a.servers {
 			if err := validateServer(s); err != nil {
@@ -80,6 +77,9 @@ func newApp(dir string) (*app, error) {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read server definitions: %w", err)
+	}
+	if err := a.migrateDemo(); err != nil {
+		return nil, err
 	}
 	a.auth, err = loadAuth(dir)
 	if err != nil {
@@ -116,7 +116,11 @@ func (a *app) serverList() []server {
 			list[i].Memory = 0
 			list[i].Disk = 0
 		} else {
-			list[i].Source = "demo"
+			list[i].Source = "waiting"
+			list[i].Online = false
+			list[i].CPU = 0
+			list[i].Memory = 0
+			list[i].Disk = 0
 		}
 	}
 	return list
@@ -132,6 +136,9 @@ func (a *app) findServer(id string) (server, bool) {
 
 func (a *app) dataSource() string {
 	rows := a.serverList()
+	if len(rows) == 0 {
+		return "waiting"
+	}
 	source := rows[0].Source
 	for _, s := range rows {
 		if s.Source != source {
@@ -212,7 +219,7 @@ func (a *app) appendLog(entry logEntry) error {
 	closeErr := f.Close()
 	return errors.Join(writeErr, syncErr, closeErr)
 }
-func (a *app) logHistory(id, level, source, query, before string, offset, limit int) (logPage, error) {
+func (a *app) logHistory(id, level, source, query, before string, offset, limit int, category ...string) (logPage, error) {
 	result := logPage{Items: []logEntry{}}
 	a.logMu.RLock()
 	defer a.logMu.RUnlock()
@@ -256,6 +263,9 @@ func (a *app) logHistory(id, level, source, query, before string, offset, limit 
 			}
 		}
 		if entry.ServerID != id || (level != "" && entry.Level != level) || (source != "" && entry.Source != source) || !strings.Contains(strings.ToLower(entry.Source+" "+entry.Message+" "+entry.Time), query) {
+			continue
+		}
+		if len(category) > 0 && category[0] != "" && logCategory(entry) != category[0] {
 			continue
 		}
 		result.Total++

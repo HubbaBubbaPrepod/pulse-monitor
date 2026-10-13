@@ -1,0 +1,41 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: backend/go.sum
+      - run: go vet ./...
+      - run: go test -shuffle=on -count=1 ./...
+      - if: runner.os == 'Linux'
+        run: go test -race -shuffle=on -count=1 ./...
+      - run: go mod tidy
+      - run: git diff --exit-code -- go.mod go.sum
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types --test lib/*.test.mjs
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build

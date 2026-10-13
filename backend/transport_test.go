@@ -10,7 +10,7 @@ import (
 
 func TestPublicHTTPSOriginAndSecureSession(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ func reportRequest(a *app, id, token, body string) *httptest.ResponseRecorder {
 func TestAgentLifecycleAndRestart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newApp(dir)
+	a, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestAgentLifecycleAndRestart(t *testing.T) {
 	if !s.Online || s.OS != "Windows 11" || s.CPU != 91 {
 		t.Fatalf("auto metadata: %+v", s)
 	}
-	restarted, err := newApp(dir)
+	restarted, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestAgentLifecycleAndRestart(t *testing.T) {
 
 func TestAgentInvalidReportDoesNotUpdateState(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

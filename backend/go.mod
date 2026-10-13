@@ -1,4 +1,4 @@
-module pulse-monitor/backend
+module github.com/HubbaBubbaPrepod/pulse-monitor/backend
 
 go 1.23.0
 

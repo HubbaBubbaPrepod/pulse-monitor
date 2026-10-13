@@ -1,4 +1,5 @@
 node_modules/
+.superpowers/
 .next/
 out/
 *.tsbuildinfo
@@ -12,3 +13,5 @@ agent/agent-state/
 agent/*.exe
 agent.token
 *.pem
+*.token
+*.key

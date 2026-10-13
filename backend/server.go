@@ -24,7 +24,19 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 func apiError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	code := map[int]string{400: "error.invalid_input", 401: "error.unauthorized", 403: "error.forbidden", 404: "error.not_found", 405: "error.method_not_allowed", 409: "error.conflict", 429: "error.rate_limited"}[status]
+	if code == "" {
+		code = "error.internal"
+	}
+	switch message {
+	case "Неверный email или пароль":
+		code = "error.invalid_credentials"
+	case "Владелец панели уже зарегистрирован":
+		code = "error.registration_closed"
+	case "Укажите имя, email и пароль от 12 символов, до 72 байт":
+		code = "error.weak_password"
+	}
+	writeJSON(w, status, map[string]string{"error": message, "code": code})
 }
 func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
@@ -43,6 +55,8 @@ func (a *app) handler() http.Handler {
 	a.authRoutes(mux)
 	a.agentRoutes(mux)
 	a.eventRoutes(mux)
+	a.preferenceRoutes(mux)
+	a.moduleRoutes(mux)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "source": a.dataSource()})
 	})
@@ -120,10 +134,6 @@ func (a *app) handler() http.Handler {
 			apiError(w, 404, "Server not found")
 			return
 		}
-		if len(list) == 1 {
-			apiError(w, 409, "Cannot remove the last server")
-			return
-		}
 		list = slices.Delete(list, i, i+1)
 		if err := a.resetAgent(r.PathValue("id"), false); err != nil {
 			apiError(w, 500, "Could not revoke agent")
@@ -189,7 +199,11 @@ func (a *app) handler() http.Handler {
 			apiError(w, 400, "Invalid log level")
 			return
 		}
-		page, err := a.logHistory(id, q.Get("level"), q.Get("source"), q.Get("q"), q.Get("before"), offset, limit)
+		if q.Get("category") != "" && !slices.Contains([]string{"system", "security", "telemetry", "agent"}, q.Get("category")) {
+			apiError(w, 400, "Invalid log category")
+			return
+		}
+		page, err := a.logHistory(id, q.Get("level"), q.Get("source"), q.Get("q"), q.Get("before"), offset, limit, q.Get("category"))
 		if err != nil {
 			apiError(w, 500, "Could not read log archive")
 			return
@@ -234,7 +248,7 @@ func (a *app) handler() http.Handler {
 			return
 		}
 
-		agent := r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/agent/") && strings.HasSuffix(r.URL.Path, "/report")
+		agent := strings.HasPrefix(r.URL.Path, "/api/agent/")
 		public := agent || r.URL.Path == "/api/health" || r.URL.Path == "/api/auth/status" || r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/register"
 		mutation := r.Method != "GET" && r.Method != "HEAD"
 		if mutation && (r.Header.Get("Sec-Fetch-Site") == "cross-site" || ((r.Method == "POST" || r.Method == "PUT") && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json"))) {
@@ -301,24 +315,12 @@ func (a *app) stream(w http.ResponseWriter, r *http.Request) {
 func (a *app) collect(ctx context.Context) error {
 	timer := time.NewTicker(5 * time.Second)
 	defer timer.Stop()
-	index := 0
 	for {
 		for _, s := range a.serverList() {
-			if s.Source != "demo" {
-				if err := a.checkAgentOffline(s); err != nil {
-					return err
-				}
-				continue
-			}
-			if !s.Online {
-				continue
-			}
-			level, source, message := demoLog(s, index)
-			if err := a.appendLog(logEntry{DataSource: "demo", ServerID: s.ID, Level: level, Source: source, Message: message}); err != nil {
-				return fmt.Errorf("append monitor log: %w", err)
+			if err := a.checkAgentOffline(s); err != nil {
+				return err
 			}
 		}
-		index++
 		select {
 		case <-ctx.Done():
 			return nil

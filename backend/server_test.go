@@ -13,9 +13,34 @@ import (
 	"time"
 )
 
+func TestAPIErrorsExposeStableCodeAndDiagnostic(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		message, code string
+	}{
+		{"credentials", 401, "Неверный email или пароль", "error.invalid_credentials"},
+		{"registration", 409, "Владелец панели уже зарегистрирован", "error.registration_closed"},
+		{"input", 400, "Invalid module package", "error.invalid_input"},
+		{"internal", 500, "Could not save module data", "error.internal"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			apiError(w, tc.status, tc.message)
+			var v struct{ Error, Code string }
+			if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+				t.Fatal(err)
+			}
+			if v.Error != tc.message || v.Code != tc.code {
+				t.Fatalf("got %+v, want diagnostic and %s", v, tc.code)
+			}
+		})
+	}
+}
+
 func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +84,7 @@ func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 			break
 		}
 	}
-	if len(ticks) != 2 || ticks[1] <= ticks[0] {
+	if len(ticks) != 2 || ticks[1] != ticks[0] {
 		t.Fatalf("expected two successive snapshots, got %v (error %v)", ticks, scanner.Err())
 	}
 	cancel()
@@ -67,7 +92,7 @@ func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 
 func TestOriginGuard(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +128,7 @@ func request(t *testing.T, a *app, method, path, body string) *httptest.Response
 
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,14 +143,14 @@ func TestBootstrap(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Servers) != 3 || result.Source != "demo" {
+	if len(result.Servers) != 3 || result.Source != "waiting" {
 		t.Fatalf("unexpected bootstrap: %+v", result)
 	}
 }
 
 func TestArchiveBoundaryComparesInstants(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +171,7 @@ func TestArchiveBoundaryComparesInstants(t *testing.T) {
 func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newApp(dir)
+	a, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +184,7 @@ func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restarted, err := newApp(dir)
+	restarted, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +211,7 @@ func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 func TestServerMutationsValidateAndPersist(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newApp(dir)
+	a, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +219,7 @@ func TestServerMutationsValidateAndPersist(t *testing.T) {
 	if w := request(t, a, "PUT", "/api/servers/test-node", body); w.Code != 200 {
 		t.Fatalf("save status: %d: %s", w.Code, w.Body.String())
 	}
-	restarted, err := newApp(dir)
+	restarted, err := newTestApp(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,47 +236,32 @@ func TestServerMutationsValidateAndPersist(t *testing.T) {
 			t.Fatalf("delete status: %d", w.Code)
 		}
 	}
-	if w := request(t, a, "DELETE", "/api/servers/production-01", ""); w.Code != 409 {
+	if w := request(t, a, "DELETE", "/api/servers/production-01", ""); w.Code != 200 {
 		t.Fatalf("last server deletion status: %d", w.Code)
 	}
 }
 
-func TestSnapshotOfflineAndCapabilities(t *testing.T) {
-	t.Parallel()
-	a, err := newApp(t.TempDir())
+func TestWaitingSnapshotDoesNotFabricateTelemetry(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		id      string
-		gpu     bool
-		offline bool
-	}{{"production-01", true, false}, {"windows-02", false, false}, {"backup-03", false, true}} {
-		t.Run(tc.id, func(t *testing.T) {
-			w := request(t, a, "GET", "/api/servers/"+tc.id+"/snapshot", "")
-			if w.Code != 200 {
-				t.Fatalf("snapshot status %d", w.Code)
-			}
-			var s snapshot
-			if err := json.Unmarshal(w.Body.Bytes(), &s); err != nil {
-				t.Fatal(err)
-			}
-			if (len(s.GPUs) > 0) != tc.gpu {
-				t.Fatalf("GPU presence: %+v", s.GPUs)
-			}
-			if tc.offline && (len(s.Packets) > 0 || len(s.Processes) > 0 || len(s.Disks) > 0) {
-				t.Fatal("offline node exposes current telemetry")
-			}
-			if !tc.offline && (len(s.Disks) == 0 || len(s.Packets) == 0) {
-				t.Fatal("missing disk/network telemetry")
-			}
-		})
+	w := request(t, a, "GET", "/api/servers/production-01/snapshot", "")
+	if w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	var s snapshot
+	if err := json.Unmarshal(w.Body.Bytes(), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Source != "waiting" || len(s.Samples)+len(s.Processes)+len(s.Disks)+len(s.GPUs)+len(s.Packets) != 0 {
+		t.Fatalf("fabricated telemetry: %+v", s)
 	}
 }
 
 func TestHostGuardRejectsDNSRebinding(t *testing.T) {
 	t.Parallel()
-	a, err := newApp(t.TempDir())
+	a, err := newTestApp(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

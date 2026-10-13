@@ -1,0 +1,54 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: backend/go.sum
+      - working-directory: backend
+        run: go test -race -shuffle=on -count=1 ./...
+  package:
+    needs: race
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 'stable'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types --test lib/*.test.mjs
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Check Go
+        working-directory: backend
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -shuffle=on -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build archives
+        shell: pwsh
+        run: ./scripts/build.ps1 -Version $env:GITHUB_REF_NAME
+      - name: Publish release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem artifacts/releases -File | Where-Object { $_.Extension -in '.zip', '.gz' -or $_.Name -eq 'checksums.txt' } | ForEach-Object FullName
+          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --title $env:GITHUB_REF_NAME --generate-notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
