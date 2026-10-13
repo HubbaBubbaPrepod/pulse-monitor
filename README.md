@@ -21,10 +21,10 @@ Pulse Monitor — панель самостоятельного размещен
 ```mermaid
 flowchart LR
     H[Linux / Windows] --> A[Pulse Agent]
-    D[Docker module] --> A
-    A -->|HTTPS: reports| M[Pulse Monitor]
+    D[Модуль Docker] --> A
+    A -->|HTTPS: отчёты| M[Pulse Monitor]
     M --> F[JSON / JSONL]
-    B[Browser] -->|HTTPS: UI / API| M
+    B[Браузер] -->|HTTPS: UI / API| M
 ```
 
 ## Быстрый старт
@@ -33,21 +33,21 @@ flowchart LR
 2. Запустите из каталога архива:
 
    ```text
-   pulse-monitor -addr 127.0.0.1:8080 -data data -static out
+   ./pulse-monitor -addr 127.0.0.1:8080 -data data -static out
    ```
 
    В PowerShell используйте `./pulse-monitor.exe`. Откройте `http://127.0.0.1:8080/register/` и создайте владельца. На удалённом сервере используйте SSH-туннель: `ssh -L 8080:127.0.0.1:8080 user@server`, затем откройте тот же локальный URL. Удалённый запуск до регистрации владельца отклоняется.
 3. Остановите программу и включите HTTPS с сертификатом своего домена:
 
    ```text
-   pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
+   ./pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
    ```
 
 4. Откройте HTTPS-адрес, войдите и добавьте узел. В настройках сохранённого узла создайте токен. Сохраните его на узле в защищённый файл `agent.token` без кавычек. Linux: `chmod 600 agent.token`; Windows: ограничьте ACL учётной записью службы, SYSTEM и администраторами.
 5. Скачайте [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent/releases) и запустите:
 
    ```text
-   pulse-agent -url https://monitor.example.com:8443 -server SERVER_ID -token-file agent.token -state agent-state
+   ./pulse-agent -url https://monitor.example.com:8443 -server SERVER_ID -token-file agent.token -state agent-state
    ```
 
    Агент отправляет отчёты сам; входящий порт на узле не нужен. Панель доступна удалённо по HTTPS.

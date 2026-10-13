@@ -33,21 +33,21 @@ flowchart LR
 2. Start from the extracted directory:
 
    ```text
-   pulse-monitor -addr 127.0.0.1:8080 -data data -static out
+   ./pulse-monitor -addr 127.0.0.1:8080 -data data -static out
    ```
 
    In PowerShell, use `./pulse-monitor.exe`. Open `http://127.0.0.1:8080/register/` and register the owner. For a remote server, use `ssh -L 8080:127.0.0.1:8080 user@server`, then open the same local URL. Remote startup is rejected until the owner is registered.
 3. Stop the program and enable HTTPS with your domain's certificate:
 
    ```text
-   pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
+   ./pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
    ```
 
 4. Open the HTTPS address, sign in, and add a node. Create a token in the saved node's settings. Save it on the node in a protected `agent.token` file without quotes. Linux: `chmod 600 agent.token`; Windows: restrict ACLs to the service account, SYSTEM, and administrators.
 5. Download [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent/releases) and start it:
 
    ```text
-   pulse-agent -url https://monitor.example.com:8443 -server SERVER_ID -token-file agent.token -state agent-state
+   ./pulse-agent -url https://monitor.example.com:8443 -server SERVER_ID -token-file agent.token -state agent-state
    ```
 
    The agent sends reports outbound; the monitored node needs no inbound port. Access the dashboard remotely through HTTPS.
