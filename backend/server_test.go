@@ -46,13 +46,13 @@ func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 	}
 	srv := httptest.NewServer(a.handler())
 	defer srv.Close()
+	cookie, _ := testSession(t, a)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", srv.URL+"/api/servers/production-01/stream", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, _ := testSession(t, a)
 	req.AddCookie(cookie)
 	resp, err := srv.Client().Do(req)
 	if err != nil {

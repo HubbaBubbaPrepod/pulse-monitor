@@ -55,7 +55,7 @@ export function ThemeEditor() {
         const imported = { ...t, id: crypto.randomUUID() };
         setPreferences({ ...preferences, themeId: imported.id, themes: [...preferences.themes, imported], appearance: { ...a, mode: imported.mode, ...profiles(imported) } });
         setError('');
-        e.target.value = ''; 
+        e.target.value = '';
         notify(tr("Тема импортирована"));
     }
     catch (e) {
