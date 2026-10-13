@@ -1,3 +1,5 @@
+**Русский** · [English](OPERATIONS.en.md)
+
 # Эксплуатация
 
 ## Данные и backup

@@ -1,28 +1,30 @@
+**English** · [Русский](CHANGELOG.ru.md)
+
 # Changelog
 
 ## [Unreleased]
 
-## [0.4.0] — первый публичный выпуск
+## [0.4.0] — first public release
 
 ### Added
 
-- Независимая панель самостоятельного размещения: один Go-бинарник обслуживает статический UI и API, готовые архивы Linux amd64/arm64 и Windows amd64.
-- Реальные узлы через отдельный Pulse Agent: метрики, процессы, диски, GPU при поддержке, соединения, журналы и события. Пустая установка ожидает агентов.
-- Первый владелец, bcrypt-хэш, cookie-сессии, CSRF, ограничение попыток входа и HTTPS для удалённого доступа.
-- Сохраняемые данные, история метрик, архив журналов с фильтрами, группировкой и CSV; выбор интервала, реалтайм и пауза просмотра.
-- Русский/английский UI, редактор оформления, пользовательские палитры, импорт/экспорт JSON, сохраняемые настройки владельца.
-- Экспериментальные модули v1: JSON-пакет с нативными сборщиками, настройками и представлениями table/cards/chart/logs; Docker-модуль в отдельном репозитории pulse-module-docker.
-- Установщики Linux/systemd и Windows, проверки сборки, документация и MIT-лицензия.
+- Independent self-hosted dashboard: one Go executable serves the static UI and API, with Linux amd64/arm64 and Windows amd64 archives.
+- Real nodes through the separate Pulse Agent: metrics, processes, disks, supported GPU metrics, connections, logs, and events. Empty installations wait for agents.
+- First-owner registration, bcrypt hashing, cookie sessions, CSRF, login attempt limits, and HTTPS for remote access.
+- Persistent data, metric history, log archives with filtering, grouping, and CSV export; interval selection, live updates, and paused viewing.
+- Russian/English UI, appearance editor, custom palettes, JSON import/export, and persistent owner preferences.
+- Experimental v1 modules: JSON packages with native collectors, settings, and table/cards/chart/logs views; Docker module in the separate pulse-module-docker repository.
+- Linux/systemd and Windows installers, build checks, documentation, and MIT license.
 
 ### Fixed
 
-- Выбранный сервер сохраняется после перезагрузки; убраны дублирующие ссылки модулей в sidebar.
-- Настройки модуля нельзя сохранить до загрузки конфигурации выбранного узла; необязательные коллекции манифеста возвращаются массивами.
-- Миграция демо-архива читает журналы потоком, сохраняет исходную копию и реальные ранее подключённые узлы.
+- The selected server persists across reloads; duplicate module links were removed from the sidebar.
+- Module settings cannot be saved before the selected node's configuration loads; optional manifest collections return arrays.
+- Demo archive migration streams logs, preserves the original copy, and retains real previously connected nodes.
 
 ### Notes
 
-- Совместимая пара первого публичного выпуска: Pulse Monitor v0.4.0 / Pulse Agent v0.4.0.
-- До v1.0 будущая совместимость не гарантируется. Модули выполняются без песочницы с правами агента.
-- GPU/пакеты зависят от ОС, драйвера и прав; архивы JSONL автоматически не очищаются.
-- Прежние 0.1–0.3 обозначали внутренние этапы разработки, а не публичные релизы этих двух репозиториев.
+- Compatible first public release pair: Pulse Monitor v0.4.0 / Pulse Agent v0.4.0.
+- Future compatibility is not guaranteed before v1.0. Modules run without a sandbox using agent permissions.
+- GPU/packet availability depends on OS, drivers, and privileges; JSONL archives are not automatically pruned.
+- Earlier 0.1–0.3 versions identified internal development stages, not public releases of these two repositories.

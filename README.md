@@ -1,12 +1,35 @@
 # Pulse Monitor
 
-Self-hosted monitoring dashboard for Linux and Windows hosts. A native server serves the web UI and API; [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent) sends telemetry over HTTPS. MIT licensed.
+**Русский** · [English](README.en.md)
+
+[![CI](https://github.com/HubbaBubbaPrepod/pulse-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/HubbaBubbaPrepod/pulse-monitor/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/HubbaBubbaPrepod/pulse-monitor)](https://github.com/HubbaBubbaPrepod/pulse-monitor/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[Быстрый старт](#быстрый-старт) · [Документация](#документация) · [Разработка](#разработка) · [Issues](https://github.com/HubbaBubbaPrepod/pulse-monitor/issues)
 
 Pulse Monitor — панель самостоятельного размещения: CPU, память, процессы, диски, доступные GPU-показатели, соединения, журналы и события. Данные поступают от реальных узлов; пустая установка ждёт подключения агентов.
 
+## Экосистема Pulse
+
+| Репозиторий | Назначение | Выпуск |
+| --- | --- | --- |
+| [Pulse Monitor](https://github.com/HubbaBubbaPrepod/pulse-monitor) | Панель, API и хранение данных; готовый архив включает Go-сервер и UI | v0.4.0 |
+| [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent) | Сборщики Linux/Windows, исходящая отправка по HTTPS | v0.4.0 |
+| [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker) | Необязательный JSON-пакет для Docker Engine | v1.0.2 |
+
+```mermaid
+flowchart LR
+    H[Linux / Windows] --> A[Pulse Agent]
+    D[Docker module] --> A
+    A -->|HTTPS: reports| M[Pulse Monitor]
+    M --> F[JSON / JSONL]
+    B[Browser] -->|HTTPS: UI / API| M
+```
+
 ## Быстрый старт
 
-1. Скачайте архив для своей платформы и `checksums.txt` из [Releases](https://github.com/HubbaBubbaPrepod/pulse-monitor/releases). Поддерживаются Linux amd64/arm64 и Windows amd64. Распакуйте архив целиком: рядом с программой нужен каталог `out`. Go и Node.js для запуска готовой сборки не нужны.
+1. Скачайте архив для своей платформы и `checksums.txt` из [Releases](https://github.com/HubbaBubbaPrepod/pulse-monitor/releases). Сверьте SHA-256 по [руководству установки](docs/INSTALL.md), затем распакуйте. Поддерживаются Linux amd64/arm64 и Windows amd64. Распакуйте архив целиком: рядом с программой нужен каталог `out`. Go и Node.js для запуска готовой сборки не нужны.
 2. Запустите из каталога архива:
 
    ```text
@@ -39,9 +62,21 @@ Pulse Monitor — панель самостоятельного размещен
 - Русский/английский интерфейс, темы и пользовательские палитры с импортом/экспортом JSON; настройки владельца сохраняются на сервере.
 - Экспериментальные модули: JSON-пакет с нативными сборщиками, настройками и представлениями. Модуль выполняет произвольный код с правами агента, без песочницы. Загружайте только доверенные пакеты.
 
-Docker-сборщик выпускается отдельно: [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker). Готовый `docker-module.json` v1.0.1 загружается в настройки модулей; затем включите его для нужного узла.
+Docker-сборщик выпускается отдельно: [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker). Готовый `docker-module.json` v1.0.2 загружается в настройки модулей; затем включите его для нужного узла.
 
 Панель и агент выпускаются независимо. Для первого публичного выпуска используйте обе версии `v0.4.0`; контракт отчётов и модулей описан как v1. До v1.0 совместимость будущих версий не гарантируется; изменения будут указаны в changelog. Сервер хранит JSON/JSONL без автоматического ограничения архива — контролируйте свободное место.
+
+## Документация
+
+| Руководство | Что внутри |
+| --- | --- |
+| [Установка](docs/INSTALL.md) | Архивы, контрольные суммы, владелец, HTTPS и службы |
+| [Эксплуатация](docs/OPERATIONS.md) | Данные, backup, обновление, удаление и диагностика |
+| [Модули](docs/MODULES.md) | Формат пакета, лимиты, доверие и Docker |
+| [Протокол](docs/PROTOCOL.md) | Отчёты агента, API владельца и совместимость |
+| [Переводы](docs/TRANSLATIONS.md) | Словари интерфейса и парная документация |
+| [История изменений](CHANGELOG.ru.md) | Публичные выпуски и ограничения |
+| [Поддержка](SUPPORT.ru.md) / [Безопасность](SECURITY.ru.md) | Обращения и сообщения об уязвимостях |
 
 ## Разработка
 
@@ -63,6 +98,8 @@ UI: `http://127.0.0.1:3000`, API: `http://127.0.0.1:8080`. Production-сборк
 
 ## Участие и лицензия
 
-[CONTRIBUTING.md](CONTRIBUTING.md) описывает проверки и процесс изменений. Сообщайте о проблемах через [Issues](https://github.com/HubbaBubbaPrepod/pulse-monitor/issues), приложив версию и обезличенные журналы.
+[Правила поведения](CODE_OF_CONDUCT.ru.md) действуют во всех пространствах проекта.
+
+[Руководство участника](CONTRIBUTING.ru.md) описывает проверки и процесс изменений. Сообщайте о проблемах через [Issues](https://github.com/HubbaBubbaPrepod/pulse-monitor/issues), приложив версию и обезличенные журналы.
 
 Код распространяется под [MIT](LICENSE). Иконки брендов: [Simple Icons](https://github.com/simple-icons/simple-icons), CC0; остальные — [Lucide](https://github.com/lucide-icons/lucide), ISC. Зависимости сохраняют собственные лицензии.

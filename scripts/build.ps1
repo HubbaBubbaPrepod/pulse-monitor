@@ -32,12 +32,14 @@ try {
   Push-Location $moduleRoot
   try {& $goCommand build -trimpath -ldflags '-s -w' -o (Join-Path $targetDir ($name+$target.suffix)) .; if($LASTEXITCODE -ne 0){throw "$name build failed for $($target.os)/$($target.arch)"}}
   finally {Pop-Location}
-  foreach($item in @('README.md','LICENSE','CHANGELOG.md','deployment')){if(Test-Path (Join-Path $projectRoot $item)){Copy-Item -LiteralPath (Join-Path $projectRoot $item) -Destination $targetDir -Recurse -Force}}
+  foreach($item in @('LICENSE','deployment')){if(Test-Path (Join-Path $projectRoot $item)){Copy-Item -LiteralPath (Join-Path $projectRoot $item) -Destination $targetDir -Recurse -Force}}
+  Get-ChildItem -LiteralPath $projectRoot -File -Filter '*.md' | Where-Object { $_.Name -match '^(README|CHANGELOG|CONTRIBUTING|SECURITY|SUPPORT|CODE_OF_CONDUCT)(\.(en|ru))?\.md$' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $targetDir }
   $docs=Join-Path $projectRoot 'docs'
   if(Test-Path $docs){
    $docTarget=Join-Path $targetDir 'docs'
    New-Item -ItemType Directory $docTarget | Out-Null
    Get-ChildItem -LiteralPath $docs -File -Filter '*.md' | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $docTarget}
+   if(Test-Path (Join-Path $docs 'assets')){Copy-Item -LiteralPath (Join-Path $docs 'assets') -Destination $docTarget -Recurse}
   }
   if($isMonitor){Copy-Item -LiteralPath (Join-Path $projectRoot 'out') -Destination $targetDir -Recurse}
   $extension=if($target.os -eq 'windows'){'zip'}else{'tar.gz'}

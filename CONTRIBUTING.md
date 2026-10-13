@@ -1,10 +1,20 @@
-# Участие в разработке
+**English** · [Русский](CONTRIBUTING.ru.md)
 
-Откройте issue с воспроизводимым сценарием либо небольшой PR. Укажите версии панели и агента, ОС/архитектуру, ожидаемое и фактическое поведение. Уберите токены, приватные адреса и чувствительные журналы. Согласуйте существенное изменение контракта до реализации.
+# Contributing
 
-Нужны Node.js 22.13+ и Go 1.23+. Клонируйте этот репозиторий, выполните `npm ci`; команды разработки — в [README](README.md). Агент разрабатывается в [отдельном репозитории](https://github.com/HubbaBubbaPrepod/pulse-agent).
+Open an issue with a reproducible scenario or a small PR. Include dashboard and agent versions, OS/architecture, and expected versus actual behavior. Remove tokens, private addresses, and sensitive logs. Discuss substantial contract changes before implementation.
 
-Проверки из корня:
+Requirements: Node.js 22.13+ and Go 1.23+. Clone this repository and install dependencies:
+
+```powershell
+git clone https://github.com/HubbaBubbaPrepod/pulse-monitor.git
+cd pulse-monitor
+npm ci
+```
+
+See [development commands](README.en.md#development). The agent is developed in a [separate repository](https://github.com/HubbaBubbaPrepod/pulse-agent). Platform packaging also needs PowerShell 7.4+.
+
+Run checks from the repository root:
 
 ```powershell
 npm run lint
@@ -16,8 +26,8 @@ go test ./...
 go vet ./...
 ```
 
-Race-проверка: `go test -race ./...` при доступных CGO и C-компиляторе. Не объявляйте её выполненной, если окружение не поддерживает запуск. Для изменений UI проверьте оба языка, темы, узкий экран и reduced motion. Для изменения протокола обновите тесты, [описание](docs/PROTOCOL.md) и changelog.
+Run `go test -race ./...` when CGO and a C compiler are available. Do not claim it ran when your environment cannot run it. For UI changes, check both languages, themes, narrow screens, and reduced motion. For protocol changes, update tests, the [protocol guide](docs/PROTOCOL.en.md), and changelog.
 
-Сохраняйте архитектуру и минимальный размер изменений; не добавляйте зависимости без необходимости. Коммиты: `type(scope): summary`, до 72 символов. В PR опишите проблему, изменения, выполненные проверки и ограничения. [Переводы](docs/TRANSLATIONS.md) принимаются тем же способом.
+Preserve the architecture and keep changes small; add dependencies only when necessary. Commit subjects use `type(scope): summary`, up to 72 characters. PR descriptions should contain **Summary**, **Changes**, **Testing**, and **Risks/Notes**: explain the problem, changed files, checks actually run, and limitations. [Translations](docs/TRANSLATIONS.en.md) follow the same process; update both documentation languages when behavior changes.
 
-Вклад распространяется под [MIT](LICENSE). До публикации сообщения об уязвимости используйте приватный канал GitHub Security, если он доступен; не прикладывайте действующие credentials в публичный issue.
+Contributions are distributed under [MIT](LICENSE). Report vulnerabilities through [private GitHub Security reporting](https://github.com/HubbaBubbaPrepod/pulse-monitor/security/advisories/new), following [SECURITY.md](SECURITY.md). Never attach live credentials to a public issue.
