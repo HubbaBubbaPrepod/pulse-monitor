@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func collectorPackage(t *testing.T) moduleManifest {
@@ -20,6 +21,53 @@ func collectorPackage(t *testing.T) moduleManifest {
 	}
 	hash := sha256.Sum256(content)
 	return moduleManifest{SchemaVersion: 1, Protocol: 1, ID: "example", Version: "1.0.0", Name: "Example", Fields: []moduleField{{Key: "endpoint", Label: "Endpoint", Type: "text", Required: true}}, Binaries: map[string]moduleBinary{runtime.GOOS + "-" + runtime.GOARCH: {SHA256: hex.EncodeToString(hash[:]), Content: content}}}
+}
+
+type delayedModuleBody struct {
+	*strings.Reader
+	delayed bool
+}
+
+func (b *delayedModuleBody) Read(p []byte) (int, error) {
+	if !b.delayed {
+		b.delayed = true
+		time.Sleep(200 * time.Millisecond)
+	}
+	return b.Reader.Read(p)
+}
+
+func TestModuleUploadAllowsBoundedSlowTransfer(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, csrf := testSession(t, a)
+	srv := httptest.NewUnstartedServer(a.handler())
+	srv.Config.ReadTimeout = 50 * time.Millisecond
+	srv.Start()
+	defer srv.Close()
+	raw, err := json.Marshal(collectorPackage(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := http.NewRequest("POST", srv.URL+"/api/modules", &delayedModuleBody{Reader: strings.NewReader(string(raw))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.ContentLength = int64(len(raw))
+	r.AddCookie(cookie)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-CSRF-Token", csrf)
+	client := srv.Client()
+	client.Timeout = 5 * time.Second
+	resp, err := client.Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 201 {
+		t.Fatal("slow valid module rejected", resp.StatusCode)
+	}
 }
 
 func installTestModule(t *testing.T, a *app, m moduleManifest) *httptest.ResponseRecorder {

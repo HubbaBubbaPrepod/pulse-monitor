@@ -275,6 +275,18 @@ func (a *app) moduleRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, items)
 	})
 	mux.HandleFunc("POST /api/modules", func(w http.ResponseWriter, r *http.Request) {
+		// Native multi-platform packages need longer than ordinary small API calls.
+		// Keep both transfer time and body size bounded.
+		controller := http.NewResponseController(w)
+		deadline := time.Now().Add(2 * time.Minute)
+		if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			apiError(w, 500, "Could not set module upload deadline")
+			return
+		}
+		if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			apiError(w, 500, "Could not set module upload deadline")
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, 68*1024*1024)
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
