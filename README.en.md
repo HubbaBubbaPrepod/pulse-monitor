@@ -1,5 +1,7 @@
 # Pulse Monitor
 
+[Pulse website](https://pulse.hubba-cloud.ru/en/) · [Practical guides](https://pulse.hubba-cloud.ru/en/guides/)
+
 [Русский](README.md) · **English**
 
 [![CI](https://github.com/HubbaBubbaPrepod/pulse-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/HubbaBubbaPrepod/pulse-monitor/actions/workflows/ci.yml)
