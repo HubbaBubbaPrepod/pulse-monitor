@@ -14,11 +14,11 @@ Self-hosted dashboard for Linux and Windows hosts: CPU, memory, processes, disks
 
 ## Pulse ecosystem
 
-| Repository | Purpose | Release |
-| --- | --- | --- |
-| [Pulse Monitor](https://github.com/HubbaBubbaPrepod/pulse-monitor) | Dashboard, API, and storage; native archives include the Go server and UI | v0.4.0 |
-| [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent) | Linux/Windows collectors with outbound HTTPS reporting | v0.4.0 |
-| [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker) | Optional JSON package for Docker Engine | v1.0.2 |
+| Repository                                                                     | Purpose                                                                   | Release |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------- |
+| [Pulse Monitor](https://github.com/HubbaBubbaPrepod/pulse-monitor)             | Dashboard, API, and storage; native archives include the Go server and UI | v0.4.0  |
+| [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent)                 | Linux/Windows collectors with outbound HTTPS reporting                    | v0.4.0  |
+| [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker) | Optional JSON package for Docker Engine                                   | v1.0.2  |
 
 ```mermaid
 flowchart LR
@@ -39,6 +39,7 @@ flowchart LR
    ```
 
    In PowerShell, use `./pulse-monitor.exe`. Open `http://127.0.0.1:8080/register/` and register the owner. For a remote server, use `ssh -L 8080:127.0.0.1:8080 user@server`, then open the same local URL. Remote startup is rejected until the owner is registered.
+
 3. Stop the program and enable HTTPS with your domain's certificate:
 
    ```text
@@ -68,15 +69,15 @@ The dashboard and agent release independently. Use both at `v0.4.0` for the firs
 
 ## Documentation
 
-| Guide | Contents |
-| --- | --- |
-| [Installation](docs/INSTALL.en.md) | Archives, checksums, owner, HTTPS, and services |
-| [Operations](docs/OPERATIONS.en.md) | Data, backups, upgrades, removal, and troubleshooting |
-| [Modules](docs/MODULES.en.md) | Package format, limits, trust, and Docker |
-| [Protocol](docs/PROTOCOL.en.md) | Agent reports, owner API, and compatibility |
-| [Translations](docs/TRANSLATIONS.en.md) | UI dictionaries and paired documentation |
-| [Changelog](CHANGELOG.md) | Public releases and limitations |
-| [Support](SUPPORT.md) / [Security](SECURITY.md) | Questions and vulnerability reporting |
+| Guide                                           | Contents                                              |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| [Installation](docs/INSTALL.en.md)              | Archives, checksums, owner, HTTPS, and services       |
+| [Operations](docs/OPERATIONS.en.md)             | Data, backups, upgrades, removal, and troubleshooting |
+| [Modules](docs/MODULES.en.md)                   | Package format, limits, trust, and Docker             |
+| [Protocol](docs/PROTOCOL.en.md)                 | Agent reports, owner API, and compatibility           |
+| [Translations](docs/TRANSLATIONS.en.md)         | UI dictionaries and paired documentation              |
+| [Changelog](CHANGELOG.md)                       | Public releases and limitations                       |
+| [Support](SUPPORT.md) / [Security](SECURITY.md) | Questions and vulnerability reporting                 |
 
 ## Development
 

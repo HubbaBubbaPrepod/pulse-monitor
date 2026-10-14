@@ -31,3 +31,14 @@ Run `go test -race ./...` when CGO and a C compiler are available. Do not claim 
 Preserve the architecture and keep changes small; add dependencies only when necessary. Commit subjects use `type(scope): summary`, up to 72 characters. PR descriptions should contain **Summary**, **Changes**, **Testing**, and **Risks/Notes**: explain the problem, changed files, checks actually run, and limitations. [Translations](docs/TRANSLATIONS.en.md) follow the same process; update both documentation languages when behavior changes.
 
 Contributions are distributed under [MIT](LICENSE). Report vulnerabilities through [private GitHub Security reporting](https://github.com/HubbaBubbaPrepod/pulse-monitor/security/advisories/new), following [SECURITY.md](SECURITY.md). Never attach live credentials to a public issue.
+
+## Formatting
+
+Node.js 22.13+ is required for the development formatter. Install the pinned local version with `npm ci`. Node.js is not required to run the Go binaries.
+
+```shell
+npm run format
+npm run format:check
+```
+
+Prettier formats supported source files, JSON, CSS, Markdown and YAML. Go files use `gofmt`. Generated files, local data and verification files are excluded through `.prettierignore`. CI checks formatting before accepting changes.

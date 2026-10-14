@@ -24,9 +24,18 @@ One JSON object contains `schemaVersion: 1`, `protocol: 1`, `id`, `version`, `na
   "author": "Your name",
   "description": "Example collector",
   "permissions": ["Read local service status"],
-  "fields": [{"key":"endpoint","label":"Endpoint","type":"text","required":true}],
-  "views": [{"kind":"cards","title":"Service","key":"service","columns":[{"key":"status","label":"Status"}]}],
-  "binaries": {"linux-amd64":{"sha256":"<64 hexadecimal characters>","content":"<base64 executable>"}}
+  "fields": [{ "key": "endpoint", "label": "Endpoint", "type": "text", "required": true }],
+  "views": [
+    {
+      "kind": "cards",
+      "title": "Service",
+      "key": "service",
+      "columns": [{ "key": "status", "label": "Status" }]
+    }
+  ],
+  "binaries": {
+    "linux-amd64": { "sha256": "<64 hexadecimal characters>", "content": "<base64 executable>" }
+  }
 }
 ```
 
@@ -34,12 +43,12 @@ One JSON object contains `schemaVersion: 1`, `protocol: 1`, `id`, `version`, `na
 
 Up to 32 fields: `text`, `password`, `number`, `boolean`, with optional `required` and `default`. Up to 16 views; `key` selects a top-level result field:
 
-| kind | Result value |
-| --- | --- |
-| `table` | Array of objects; columns select row keys |
-| `cards` | Object; columns select card values |
+| kind    | Result value                                                             |
+| ------- | ------------------------------------------------------------------------ |
+| `table` | Array of objects; columns select row keys                                |
+| `cards` | Object; columns select card values                                       |
 | `chart` | Object of numeric values; the current view retains the latest 60 samples |
-| `logs` | Array of messages |
+| `logs`  | Array of messages                                                        |
 
 A column contains `key`, `label`, and optional `unit`. Packages contain no UI JavaScript; the dashboard renders the views. Change `version` when changing executables; conflicting content for an existing version is rejected.
 
@@ -48,7 +57,7 @@ A column contains `key`, `label`, and optional `unit`. Packages contain no UI Ja
 The agent starts the collector as a separate process and sends one JSON object to stdin:
 
 ```json
-{"protocol":1,"config":{"endpoint":"local-service"}}
+{ "protocol": 1, "config": { "endpoint": "local-service" } }
 ```
 
 The collector prints exactly one JSON object to stdout and exits with code 0, for example `{"service":{"status":"running"}}`. Send diagnostics to stderr. stdout is limited to 512 KiB; download/installation and execution of one module share a 5-second timeout. The agent waits 5 seconds between cycles; this does not guarantee an exact interval with multiple modules. Process failure, timeout, or invalid JSON results in `error`. stderr is not sent to the dashboard.

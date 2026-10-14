@@ -1,12 +1,128 @@
-"use client";
-import {supportedLocales,resolveLocale,translate} from "@/lib/i18n";
-import {useLocale,tr,trText} from "./locale";
-import { SlidersHorizontal, Activity } from "lucide-react";
-import { ThemeEditor } from "./theme-editor";
-import { useMonitor } from "./provider";
-import { PageHeading, PageMotion, Panel } from "./ui";
+'use client';
+import { supportedLocales, resolveLocale, translate } from '@/lib/i18n';
+import { useLocale, tr, trText } from './locale';
+import { SlidersHorizontal, Activity } from 'lucide-react';
+import { ThemeEditor } from './theme-editor';
+import { useMonitor } from './provider';
+import { PageHeading, PageMotion, Panel } from './ui';
 export function Settings() {
-    useLocale();
-    const { server, preferences, setPreferences, notify } = useMonitor();
-    return <PageMotion><PageHeading title={tr("Всё по-вашему.")} subtitle={tr("Внешний вид и поведение рабочего пространства")}/><div className="settings-grid appearance-settings"><Panel className="settings-panel"><div className="panel-title"><h2>{tr("Оформление")}</h2><SlidersHorizontal size={18}/></div><p className="muted">{tr("Ваши темы и настройки сохраняются на сервере и доступны с любого устройства.")}</p><ThemeEditor /><div className="setting-row"><div><strong>{tr("Компактный вид")}</strong><p>{tr("Меньше отступов в таблицах и списках")}</p></div><button role="switch" aria-checked={preferences.compact} aria-label={tr("Компактный вид")} className={`switch ${preferences.compact ? "on" : ""}`} onClick={() => setPreferences({ ...preferences, compact: !preferences.compact })}><span /></button></div></Panel><Panel className="settings-panel"><div className="panel-title"><h2>{tr("Обновление данных")}</h2><Activity size={18}/></div><label className="field">{tr("Режим обновления")}<select value={preferences.interval} onChange={e => { setPreferences({ ...preferences, interval: Number(e.target.value) }); notify(tr("Частота обновления изменена")); }}>{trText([0, 2, 5, 10, 30].map(n => <option key={n} value={n}>{trText(n === 0 ? tr("Реалтайм \u00B7 поток SSE") : tr("Каждые {p0} сек.", { p0: n }))}</option>))}</select></label><div className="form-note"><p>{tr("В реалтайме бэкенд отправляет обновления каждые 500 мс. Сбор и архивирование логов продолжаются независимо от паузы просмотра. Системная настройка уменьшения движения также учитывается.")}</p></div><div className="form-divider"/><label className="field">{tr("Язык интерфейса")}<select value={preferences.locale} onChange={e => setPreferences({ ...preferences, locale: resolveLocale(e.target.value) })}>{supportedLocales.map(locale => <option key={locale} value={locale}>{translate("locale.name",locale)}</option>)}</select></label><h3>{tr("О рабочем пространстве")}</h3><dl className="detail-list"><div><dt>{tr("Версия")}</dt><dd>Pulse / 0.4.0</dd></div><div><dt>{tr("Источник данных")}</dt><dd>{trText(server?.source === "agent" ? tr("Go-агент") : server?.source === "waiting" ? tr("Ожидаем агента") : tr("Нет серверов"))}</dd></div><div><dt>{tr("Хранение настроек")}</dt><dd>{tr("На сервере монитора")}</dd></div><div><dt>{tr("Подключение агента")}</dt><dd>{trText(server?.source === "agent" && server?.online ? tr("Подключён") : tr("Ожидаем соединения"))}</dd></div></dl></Panel></div></PageMotion>;
+  useLocale();
+  const { server, preferences, setPreferences, notify } = useMonitor();
+  return (
+    <PageMotion>
+      <PageHeading
+        title={tr('Всё по-вашему.')}
+        subtitle={tr('Внешний вид и поведение рабочего пространства')}
+      />
+      <div className="settings-grid appearance-settings">
+        <Panel className="settings-panel">
+          <div className="panel-title">
+            <h2>{tr('Оформление')}</h2>
+            <SlidersHorizontal size={18} />
+          </div>
+          <p className="muted">
+            {tr('Ваши темы и настройки сохраняются на сервере и доступны с любого устройства.')}
+          </p>
+          <ThemeEditor />
+          <div className="setting-row">
+            <div>
+              <strong>{tr('Компактный вид')}</strong>
+              <p>{tr('Меньше отступов в таблицах и списках')}</p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={preferences.compact}
+              aria-label={tr('Компактный вид')}
+              className={`switch ${preferences.compact ? 'on' : ''}`}
+              onClick={() => setPreferences({ ...preferences, compact: !preferences.compact })}
+            >
+              <span />
+            </button>
+          </div>
+        </Panel>
+        <Panel className="settings-panel">
+          <div className="panel-title">
+            <h2>{tr('Обновление данных')}</h2>
+            <Activity size={18} />
+          </div>
+          <label className="field">
+            {tr('Режим обновления')}
+            <select
+              value={preferences.interval}
+              onChange={(e) => {
+                setPreferences({ ...preferences, interval: Number(e.target.value) });
+                notify(tr('Частота обновления изменена'));
+              }}
+            >
+              {trText(
+                [0, 2, 5, 10, 30].map((n) => (
+                  <option key={n} value={n}>
+                    {trText(
+                      n === 0 ? tr('Реалтайм \u00B7 поток SSE') : tr('Каждые {p0} сек.', { p0: n }),
+                    )}
+                  </option>
+                )),
+              )}
+            </select>
+          </label>
+          <div className="form-note">
+            <p>
+              {tr(
+                'В реалтайме бэкенд отправляет обновления каждые 500 мс. Сбор и архивирование логов продолжаются независимо от паузы просмотра. Системная настройка уменьшения движения также учитывается.',
+              )}
+            </p>
+          </div>
+          <div className="form-divider" />
+          <label className="field">
+            {tr('Язык интерфейса')}
+            <select
+              value={preferences.locale}
+              onChange={(e) =>
+                setPreferences({ ...preferences, locale: resolveLocale(e.target.value) })
+              }
+            >
+              {supportedLocales.map((locale) => (
+                <option key={locale} value={locale}>
+                  {translate('locale.name', locale)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <h3>{tr('О рабочем пространстве')}</h3>
+          <dl className="detail-list">
+            <div>
+              <dt>{tr('Версия')}</dt>
+              <dd>Pulse / 0.4.0</dd>
+            </div>
+            <div>
+              <dt>{tr('Источник данных')}</dt>
+              <dd>
+                {trText(
+                  server?.source === 'agent'
+                    ? tr('Go-агент')
+                    : server?.source === 'waiting'
+                      ? tr('Ожидаем агента')
+                      : tr('Нет серверов'),
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{tr('Хранение настроек')}</dt>
+              <dd>{tr('На сервере монитора')}</dd>
+            </div>
+            <div>
+              <dt>{tr('Подключение агента')}</dt>
+              <dd>
+                {trText(
+                  server?.source === 'agent' && server?.online
+                    ? tr('Подключён')
+                    : tr('Ожидаем соединения'),
+                )}
+              </dd>
+            </div>
+          </dl>
+        </Panel>
+      </div>
+    </PageMotion>
+  );
 }

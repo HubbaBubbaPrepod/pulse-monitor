@@ -1,3 +1,5 @@
-import { Events } from "@/components/events";
+import { Events } from '@/components/events';
 
-export default function Page() { return <Events />; }
+export default function Page() {
+  return <Events />;
+}

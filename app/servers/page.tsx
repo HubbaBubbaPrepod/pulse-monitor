@@ -1,3 +1,5 @@
-import { Servers } from "@/components/servers";
+import { Servers } from '@/components/servers';
 
-export default function Page() { return <Servers />; }
+export default function Page() {
+  return <Servers />;
+}

@@ -1,3 +1,5 @@
-import { Logs } from "@/components/logs";
+import { Logs } from '@/components/logs';
 
-export default function Page() { return <Logs />; }
+export default function Page() {
+  return <Logs />;
+}

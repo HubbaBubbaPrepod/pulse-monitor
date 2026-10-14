@@ -6,7 +6,9 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
   },
   "dependencies": {
     "@gsap/react": "2.1.2",
@@ -22,6 +24,7 @@
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "16.4.0",
+    "prettier": "3.9.10",
     "typescript": "^5.9.0"
   }
 }

@@ -1,3 +1,5 @@
-import { Settings } from "@/components/settings";
+import { Settings } from '@/components/settings';
 
-export default function Page() { return <Settings />; }
+export default function Page() {
+  return <Settings />;
+}

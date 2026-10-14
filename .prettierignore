@@ -1,0 +1,21 @@
+# Dependencies, generated files and local runtime data
+node_modules/
+.next/
+out/
+dist/
+artifacts/
+data/
+backend/data/
+agent-state/
+agent/agent-state/
+.superpowers/
+.github/assets/
+package-lock.json
+*.tsbuildinfo
+AGENTS.md
+google*.html
+# Go uses gofmt instead of Prettier
+*.go
+go.mod
+go.sum
+next-env.d.ts

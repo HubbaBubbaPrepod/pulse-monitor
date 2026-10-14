@@ -1,3 +1,5 @@
-import { Processes } from "@/components/processes";
+import { Processes } from '@/components/processes';
 
-export default function Page() { return <Processes />; }
+export default function Page() {
+  return <Processes />;
+}

@@ -35,6 +35,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm run format:check
       - run: node --experimental-strip-types --test lib/*.test.mjs
       - run: npm run lint
       - run: npm run typecheck

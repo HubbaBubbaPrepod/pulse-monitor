@@ -1,3 +1,5 @@
-import { Overview } from "@/components/overview";
+import { Overview } from '@/components/overview';
 
-export default function Page() { return <Overview />; }
+export default function Page() {
+  return <Overview />;
+}

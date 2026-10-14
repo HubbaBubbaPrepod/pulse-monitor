@@ -24,9 +24,18 @@
   "author": "Your name",
   "description": "Example collector",
   "permissions": ["Read local service status"],
-  "fields": [{"key":"endpoint","label":"Endpoint","type":"text","required":true}],
-  "views": [{"kind":"cards","title":"Service","key":"service","columns":[{"key":"status","label":"Status"}]}],
-  "binaries": {"linux-amd64":{"sha256":"<64 hexadecimal characters>","content":"<base64 executable>"}}
+  "fields": [{ "key": "endpoint", "label": "Endpoint", "type": "text", "required": true }],
+  "views": [
+    {
+      "kind": "cards",
+      "title": "Service",
+      "key": "service",
+      "columns": [{ "key": "status", "label": "Status" }]
+    }
+  ],
+  "binaries": {
+    "linux-amd64": { "sha256": "<64 hexadecimal characters>", "content": "<base64 executable>" }
+  }
 }
 ```
 
@@ -34,12 +43,12 @@
 
 До 32 полей: `text`, `password`, `number`, `boolean`, необязательные `required` и `default`. До 16 представлений; `key` указывает верхнее поле результата:
 
-| kind | Значение в результате |
-| --- | --- |
-| `table` | Массив объектов, колонки выбирают ключи строки |
-| `cards` | Объект, колонки выбирают значения карточек |
+| kind    | Значение в результате                                                         |
+| ------- | ----------------------------------------------------------------------------- |
+| `table` | Массив объектов, колонки выбирают ключи строки                                |
+| `cards` | Объект, колонки выбирают значения карточек                                    |
 | `chart` | Объект числовых значений; последние 60 измерений хранятся в текущем просмотре |
-| `logs` | Массив сообщений |
+| `logs`  | Массив сообщений                                                              |
 
 Колонка содержит `key`, `label`, необязательный `unit`. Пакет не содержит JavaScript интерфейса: представления строит панель. Меняйте `version` при изменении бинарников; конфликт содержимого существующей версии отклоняется.
 
@@ -48,7 +57,7 @@
 Агент запускает сборщик как отдельный процесс, передаёт один JSON в stdin:
 
 ```json
-{"protocol":1,"config":{"endpoint":"local-service"}}
+{ "protocol": 1, "config": { "endpoint": "local-service" } }
 ```
 
 Сборщик печатает ровно один JSON-объект в stdout и завершается с кодом 0, например `{"service":{"status":"running"}}`. Диагностические сообщения направляйте в stderr. stdout ограничен 512 KiB; скачивание/установка и запуск одного модуля разделяют таймаут 5 секунд. Агент ждёт 5 секунд между циклами; это не гарантия точного периода при нескольких модулях. Ошибка процесса, таймаут или некорректный JSON дают `error`. stderr не передаётся в панель.

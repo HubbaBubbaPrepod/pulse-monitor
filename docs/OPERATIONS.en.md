@@ -21,14 +21,14 @@ On Linux, stop and disable the unit (`sudo systemctl disable --now pulse-monitor
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| Dashboard refuses remote startup | Owner exists in the active `-data`; certificate, key, and `-public-url` are supplied together |
-| TLS error | Domain, certificate expiry, full chain, OS trust; URL has no path |
-| Node waits for data / offline | `-server`, token, URL, firewall, outbound access; `pulse-agent -check` checks local collection |
-| Agent receives HTTP 401 | Token replaced or revoked; update the file and restart |
-| Missing GPU / logs / processes | Agent permissions, driver, `nvidia-smi`; some OS metrics are unavailable |
-| Missing packets | TShark, Npcap on Windows, capture permissions, `tshark -D`, and `-capture` |
-| Module error / unsupported | Architecture build, resource permissions, configuration, timeout, and JSON protocol |
+| Symptom                          | Check                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Dashboard refuses remote startup | Owner exists in the active `-data`; certificate, key, and `-public-url` are supplied together  |
+| TLS error                        | Domain, certificate expiry, full chain, OS trust; URL has no path                              |
+| Node waits for data / offline    | `-server`, token, URL, firewall, outbound access; `pulse-agent -check` checks local collection |
+| Agent receives HTTP 401          | Token replaced or revoked; update the file and restart                                         |
+| Missing GPU / logs / processes   | Agent permissions, driver, `nvidia-smi`; some OS metrics are unavailable                       |
+| Missing packets                  | TShark, Npcap on Windows, capture permissions, `tshark -D`, and `-capture`                     |
+| Module error / unsupported       | Architecture build, resource permissions, configuration, timeout, and JSON protocol            |
 
 Linux: `sudo journalctl -u pulse-monitor -f` / `pulse-agent`. Manual startup prints errors in the terminal. Do not publish tokens, TLS keys, private configuration, or unredacted logs in Issues.

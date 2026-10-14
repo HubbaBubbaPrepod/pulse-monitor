@@ -1,3 +1,5 @@
-import { Resources } from "@/components/resources";
+import { Resources } from '@/components/resources';
 
-export default function Page() { return <Resources />; }
+export default function Page() {
+  return <Resources />;
+}
