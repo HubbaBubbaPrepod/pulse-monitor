@@ -3368,3 +3368,56 @@ body {
 .logs-toolbar > .button {
   white-space: nowrap;
 }
+
+.module-tabs {
+  margin-bottom: 24px;
+}
+.marketplace-workspace {
+  display: grid;
+  gap: 24px;
+}
+.marketplace-connection {
+  display: grid;
+  gap: 16px;
+  max-width: 850px;
+}
+.marketplace-filters {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.marketplace-filters .field {
+  flex: 1 1 200px;
+  margin: 0;
+}
+.marketplace-review {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+.marketplace-digest {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.marketplace-consent {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.marketplace-consent input {
+  margin-top: 6px;
+  accent-color: var(--text);
+}
+.marketplace-workspace .module-info > .button {
+  align-self: start;
+}
+@media (max-width: 600px) {
+  .marketplace-connection .button-row {
+    flex-wrap: wrap;
+  }
+}

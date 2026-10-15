@@ -57,6 +57,7 @@ func (a *app) handler() http.Handler {
 	a.eventRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.moduleRoutes(mux)
+	a.marketplaceRoutes(mux)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "source": a.dataSource()})
 	})

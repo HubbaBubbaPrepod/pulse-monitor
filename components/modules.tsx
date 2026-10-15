@@ -13,6 +13,7 @@ import {
   moduleChartSeries,
 } from '@/lib/modules';
 import { useMonitor } from './provider';
+import { Marketplace } from './marketplace';
 import { PageHeading, PageMotion, Panel, Modal, Empty, Skeleton } from './ui';
 function ConfigureModule({ module, onClose }: { module: ModuleManifest; onClose: () => void }) {
   useLocale();
@@ -432,6 +433,7 @@ export function Modules() {
       setError(e instanceof Error ? e.message : tr('Не удалось установить модуль'));
     }
   }
+  const [view, setView] = useState<'installed' | 'marketplace'>('installed');
   const selected = modules.find((m) => m.id === params.get('id'));
   return (
     <PageMotion>
@@ -455,6 +457,25 @@ export function Modules() {
           </label>
         }
       />
+      {!selected && (
+        <div className="button-row module-tabs" role="group" aria-label={tr('Разделы модулей')}>
+          <button
+            className={`button ${view === 'installed' ? 'primary' : ''}`}
+            aria-pressed={view === 'installed'}
+            onClick={() => setView('installed')}
+          >
+            {tr('Установленные')}
+          </button>
+          <button
+            className={`button ${view === 'marketplace' ? 'primary' : ''}`}
+            aria-pressed={view === 'marketplace'}
+            onClick={() => setView('marketplace')}
+          >
+            {tr('Маркетплейс')}
+          </button>
+        </div>
+      )}
+      {view === 'marketplace' && !selected && <Marketplace installed={modules} />}
       {trText(
         error ? (
           <p className="form-error" role="alert">
@@ -463,7 +484,7 @@ export function Modules() {
         ) : null,
       )}
       {trText(
-        selected ? (
+        view === 'marketplace' && !selected ? null : selected ? (
           <>
             <button
               className="button"

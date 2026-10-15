@@ -274,96 +274,7 @@ func (a *app) moduleRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, items)
 	})
-	mux.HandleFunc("POST /api/modules", func(w http.ResponseWriter, r *http.Request) {
-		// Native multi-platform packages need longer than ordinary small API calls.
-		// Keep both transfer time and body size bounded.
-		controller := http.NewResponseController(w)
-		deadline := time.Now().Add(2 * time.Minute)
-		if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			apiError(w, 500, "Could not set module upload deadline")
-			return
-		}
-		if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			apiError(w, 500, "Could not set module upload deadline")
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, 68*1024*1024)
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		var m moduleManifest
-		if err := decoder.Decode(&m); err != nil {
-			apiError(w, 400, "Invalid module package")
-			return
-		}
-		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-			apiError(w, 400, "Expected one package")
-			return
-		}
-		if err := validateModule(m, true); err != nil {
-			apiError(w, 400, err.Error())
-			return
-		}
-		normalizeModule(&m)
-		a.writeMu.Lock()
-		defer a.writeMu.Unlock()
-		root := filepath.Join(a.moduleRoot(), m.ID)
-		version := filepath.Join(root, m.Version)
-		_, versionErr := os.Stat(version)
-		if versionErr == nil {
-			// Removed packages keep their binaries and data. Reactivate only the
-			// identical package; a version must never silently change its bytes.
-			if _, err := os.Stat(filepath.Join(root, "manifest.json")); !errors.Is(err, os.ErrNotExist) {
-				apiError(w, 409, "Module version already installed")
-				return
-			}
-			for target, b := range m.Binaries {
-				raw, err := os.ReadFile(filepath.Join(version, target))
-				if err != nil || !bytes.Equal(raw, b.Content) {
-					apiError(w, 409, "Module version content differs")
-					return
-				}
-				b.Content = nil
-				m.Binaries[target] = b
-			}
-			if err := saveJSON(filepath.Join(root, "manifest.json"), m); err != nil {
-				apiError(w, 500, "Could not save manifest")
-				return
-			}
-			writeJSON(w, 201, m)
-			return
-		}
-		if !errors.Is(versionErr, os.ErrNotExist) {
-			apiError(w, 500, "Could not read module version")
-			return
-		}
-		if err := os.MkdirAll(root, 0700); err != nil {
-			apiError(w, 500, "Could not install module")
-			return
-		}
-		stage, err := os.MkdirTemp(root, ".install-")
-		if err != nil {
-			apiError(w, 500, "Could not stage module")
-			return
-		}
-		defer os.RemoveAll(stage)
-		for target, b := range m.Binaries {
-			if err := os.WriteFile(filepath.Join(stage, target), b.Content, 0600); err != nil {
-				apiError(w, 500, "Could not write module binary")
-				return
-			}
-			b.Content = nil
-			m.Binaries[target] = b
-		}
-		if err := os.Rename(stage, version); err != nil {
-			apiError(w, 500, "Could not finalize module")
-			return
-		}
-		if err := saveJSON(filepath.Join(root, "manifest.json"), m); err != nil {
-			apiError(w, 500, "Could not save manifest")
-			return
-		}
-		writeJSON(w, 201, m)
-	})
+	mux.HandleFunc("POST /api/modules", a.installModule)
 	mux.HandleFunc("DELETE /api/modules/{module}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("module")
 		if !validID.MatchString(id) {
@@ -567,4 +478,110 @@ func (a *app) moduleRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]bool{"accepted": true})
 	})
+}
+
+func (a *app) installModule(w http.ResponseWriter, r *http.Request) {
+	a.installModulePackage(w, r, "")
+}
+
+func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marketplace string) {
+	// Native multi-platform packages need longer than ordinary small API calls.
+	// Keep both transfer time and body size bounded.
+	controller := http.NewResponseController(w)
+	deadline := time.Now().Add(2 * time.Minute)
+	if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		apiError(w, 500, "Could not set module upload deadline")
+		return
+	}
+	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		apiError(w, 500, "Could not set module upload deadline")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 68*1024*1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var m moduleManifest
+	if err := decoder.Decode(&m); err != nil {
+		apiError(w, 400, "Invalid module package")
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		apiError(w, 400, "Expected one package")
+		return
+	}
+	if err := validateModule(m, true); err != nil {
+		apiError(w, 400, err.Error())
+		return
+	}
+	normalizeModule(&m)
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	if marketplace != "" {
+		config, err := a.marketplaceConfiguration()
+		if err != nil || !config.Enabled || config.URL != marketplace {
+			apiError(w, 409, "Marketplace settings changed")
+			return
+		}
+		if _, err := a.module(m.ID); !errors.Is(err, os.ErrNotExist) {
+			apiError(w, 409, "Module ID already installed")
+			return
+		}
+	}
+	root := filepath.Join(a.moduleRoot(), m.ID)
+	version := filepath.Join(root, m.Version)
+	_, versionErr := os.Stat(version)
+	if versionErr == nil {
+		// Removed packages keep their binaries and data. Reactivate only the
+		// identical package; a version must never silently change its bytes.
+		if _, err := os.Stat(filepath.Join(root, "manifest.json")); !errors.Is(err, os.ErrNotExist) {
+			apiError(w, 409, "Module version already installed")
+			return
+		}
+		for target, b := range m.Binaries {
+			raw, err := os.ReadFile(filepath.Join(version, target))
+			if err != nil || !bytes.Equal(raw, b.Content) {
+				apiError(w, 409, "Module version content differs")
+				return
+			}
+			b.Content = nil
+			m.Binaries[target] = b
+		}
+		if err := saveJSON(filepath.Join(root, "manifest.json"), m); err != nil {
+			apiError(w, 500, "Could not save manifest")
+			return
+		}
+		writeJSON(w, 201, m)
+		return
+	}
+	if !errors.Is(versionErr, os.ErrNotExist) {
+		apiError(w, 500, "Could not read module version")
+		return
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		apiError(w, 500, "Could not install module")
+		return
+	}
+	stage, err := os.MkdirTemp(root, ".install-")
+	if err != nil {
+		apiError(w, 500, "Could not stage module")
+		return
+	}
+	defer os.RemoveAll(stage)
+	for target, b := range m.Binaries {
+		if err := os.WriteFile(filepath.Join(stage, target), b.Content, 0600); err != nil {
+			apiError(w, 500, "Could not write module binary")
+			return
+		}
+		b.Content = nil
+		m.Binaries[target] = b
+	}
+	if err := os.Rename(stage, version); err != nil {
+		apiError(w, 500, "Could not finalize module")
+		return
+	}
+	if err := saveJSON(filepath.Join(root, "manifest.json"), m); err != nil {
+		apiError(w, 500, "Could not save manifest")
+		return
+	}
+	writeJSON(w, 201, m)
 }

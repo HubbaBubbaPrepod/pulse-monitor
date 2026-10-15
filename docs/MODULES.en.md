@@ -73,3 +73,27 @@ Download `docker-module.json` from the [module releases](https://github.com/Hubb
 ```
 
 The build produces `artifacts/releases/docker-module.json`. Upload it to dashboard module settings and enable it for a node with Docker. Linux uses a Unix socket; Windows uses a named pipe. The collector makes read requests, but Docker socket access usually grants privileged control over the host; it is not a security boundary. Do not expose the Docker API to the network for this module.
+
+## Release package acceptance
+
+The Go backend can verify a downloaded package without modifying a running monitor. From `backend`:
+
+```sh
+go test -tags=integration -run='^TestInstallReleasedDockerModule$' -count=1 -v -args -module-package=/absolute/path/docker-module.json -module-sha256=<EXPECTED_SHA256> -module-version=1.0.3
+```
+
+Supply an independently verified SHA-256 and expected release version. The test installs the real JSON through the HTTP handler into `t.TempDir()`, checks all three platform files and rejects reinstalling the same immutable version. It never executes binaries or contacts production agents. Without a package argument, this additional test is skipped.
+
+## Marketplace catalog
+
+Open **Modules → Marketplace**, enter the catalog origin and select Connect catalog. Connections are disabled by default. Settings persist in `data/marketplace.json`. HTTPS origins without paths, queries or credentials are supported; HTTP is accepted only for a literal loopback IP such as `http://127.0.0.1:3100`. Private DNS destinations and redirects are rejected. On a remote Monitor, 127.0.0.1 means the Monitor server itself, not the browser computer.
+
+Monitor requests the catalog when opening the tab, searching, paging or refreshing. Only search filters and selected module requests are sent; telemetry, logs, node configuration and sign-in credentials are never sent. Agents never contact the marketplace. Disconnecting blocks new requests and installation of already downloaded results; installed modules continue running.
+
+Select a module and published version, inspect its publisher, permissions, platforms, source and SHA-256, then confirm trust. Monitor rechecks publication, verifies the complete JSON size and digest and uses the shared installer with ELF/PE headers and binary digest validation. Assign the installed module to individual servers separately. Catalog approval does not guarantee native code safety.
+
+Protocol v1 module IDs are global. Catalog installation never replaces an existing ID, including another publisher's module. Use existing manual JSON import for updates; installed modules and manual import remain available offline. Search, platform filters and next-page loading are supported. Downloading from a catalog requires no marketplace account.
+
+Monitor owner API: `GET/PUT /api/marketplace`, `GET /api/marketplace/catalog?query=&platform=&cursor=`, `GET /api/marketplace/versions?owner=&id=`, `POST /api/marketplace/install` with `{owner,id,version,sha256}`. Existing cookie-session and CSRF protection apply to mutations. Catalog requests and installation return 409 while disconnected.
+
+For end-to-end verification against a running local catalog, add `-module-marketplace http://127.0.0.1:3100` to the released-package test command. The test creates a temporary Monitor data directory, finds the approved release through the catalog API and installs through `/api/marketplace/install`; it does not modify a running Monitor or agent assignments.

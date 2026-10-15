@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Add an opt-in module marketplace catalog with persistent origin settings, search, platforms, published version selection and explicit trust confirmation. Fetch and verify exact release snapshots through the existing installer; preserve offline JSON import and reject installed-ID replacement.
+
 ## [0.4.0] — first public release
 
 ### Added
