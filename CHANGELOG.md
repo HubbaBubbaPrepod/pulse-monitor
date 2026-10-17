@@ -2,7 +2,7 @@
 
 # Changelog
 
-## [Unreleased]
+## [0.5.0] — 2026-10-18
 
 - Preserve migration checksums across Git LF/CRLF checkouts and send only writable module configuration fields from the settings UI.
 

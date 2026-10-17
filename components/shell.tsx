@@ -161,7 +161,7 @@ function Chrome({ children }: { children: ReactNode }) {
                     : tr('Подключите сервер'),
               )}
             </span>
-            <span className="mono">v0.4</span>
+            <span className="mono">v0.5</span>
           </div>
           <Link
             href="/settings/"
