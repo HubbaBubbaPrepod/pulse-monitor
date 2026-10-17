@@ -1,6 +1,6 @@
 # Pulse module platform design
 
-Status: proposal for review; not implemented.
+Status: architecture direction agreed in conversation; implementation not started.
 
 ## Purpose
 
@@ -50,6 +50,13 @@ new runtime requirement. Neither is the initial implementation approach.
 | Scheduled job | Monitor or Agent | Periodic checks and reports                       |
 | Action        | Monitor or Agent | User-requested integration operations             |
 | UI            | Monitor browser  | Settings, result views and dedicated module pages |
+
+The agreed scope also includes backup and restore, deployment and rollback,
+service/container management, diagnostics, inventory, security checks, reports,
+file operations and integrations. These are module applications, not special
+cases to embed in Pulse's core. Destructive operations require distinct grants
+and an execution audit trail. Automatic execution requires an explicit rule;
+installation alone must never authorize it.
 
 Contribution types must not be a closed list of business domains such as Docker
 or Telegram. New functionality is expressed through stable host services. Some
@@ -138,16 +145,37 @@ keeps working without an open browser. It can notify about an offline Agent.
 Bot credentials must not be distributed to the monitored agents. Test against a
 local fake Telegram endpoint before an operator explicitly configures real sends.
 
+## Cross-domain acceptance scenarios
+
+Use three independently developed modules to test the extension boundaries:
+
+- Telegram: Monitor-side event processing, secrets and external delivery.
+- Backup: Agent-side scheduled work, durable state, progress, explicit restore
+  authorization and audit. Long-running backup jobs require a later worker/job
+  lifecycle; the initial bounded invocation runtime does not support them.
+- Docker management: Agent-side collection plus separately authorized manual
+  actions and UI. Existing read-only Docker v1 remains unchanged.
+
+Modules may publish versioned namespaced events for other modules. For example,
+a certificate-check module emits a renewal-needed event, an explicitly configured
+automation invokes an authorized renewal action, and Telegram reports its result.
+Cross-module wiring must not bypass permissions, create unbounded event loops or
+expose another module's configuration/secrets. Do not require the three acceptance
+modules to be implemented before the foundational contract is shipped.
+
 ## Delivery stages
 
-1. **v2 foundation:** manifest/schema, compatibility negotiation, component
-   installation, platform validation and unchanged Docker v1 regression coverage.
+1. **v2 foundation:** manifest/schema, compatibility preflight, platform validation
+   and unchanged Docker v1 regression coverage. Validation is not activation:
+   v2 installation stays unavailable until its runtime and UI support are ready.
 2. **Monitor runtime:** lifecycle, settings/state/secrets, host APIs, durable event
    delivery and health. Test restart, cancellation, overload and invalid output.
 3. **Alerts and Telegram:** offline detection, sustained threshold rules,
    fired/resolved events, module example and end-to-end fake-service tests.
 4. **Agent extensions and actions:** v2 collectors, schedules, authorized actions,
-   mixed-version behavior and Linux/Windows coverage.
+   mixed-version behavior and Linux/Windows coverage. Long-running jobs need a
+   separately reviewed progress/cancellation/restart protocol before backup or
+   deployment modules may rely on that capability.
 5. **Catalog and UI:** compatible marketplace validation/metadata, installation
    consent, settings/actions/views and author documentation. Verify manual and
    marketplace installation of both v1 and v2 packages.
