@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- Add owner-authenticated v2 package preflight, a multi-component manifest schema
+  and author templates. Validation does not install or execute packages; v1
+  collectors remain compatible and unsupported v2 installation is explicit.
+
 - Add an opt-in module marketplace catalog with persistent origin settings, search, platforms, published version selection and explicit trust confirmation. Fetch and verify exact release snapshots through the existing installer; preserve offline JSON import and reject installed-ID replacement.
 
 ## [0.4.0] — first public release

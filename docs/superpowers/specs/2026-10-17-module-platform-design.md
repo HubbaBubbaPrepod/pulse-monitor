@@ -1,6 +1,7 @@
 # Pulse module platform design
 
-Status: architecture direction agreed in conversation; implementation not started.
+Status: architecture agreed; stage-1 contract/preflight implemented and tested.
+Runtime, Docker interactivity and the remaining stages are in progress, not released.
 
 ## Purpose
 

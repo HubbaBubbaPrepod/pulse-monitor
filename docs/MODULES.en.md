@@ -2,6 +2,46 @@
 
 # Modules (experimental protocol v1)
 
+## Author preflight for v2
+
+The separate v2 contract allows a package to declare `agent` and `monitor`
+components, configuration fields, and `interval`, `event` (Monitor only), or
+`manual` triggers. This stage implements **format validation, not execution**.
+V2 packages cannot be installed or enabled yet; Docker v1 remains unchanged.
+
+With an owner session, `GET /api/module-capabilities` returns supported schemas
+`[1,2]`, installable schemas `[1]`, and an empty v2 runtimes list.
+`POST /api/module-packages/validate` accepts the complete package JSON, using the
+same session cookie and `X-CSRF-Token` header as other authenticated mutations.
+It creates no files and never executes code from the package.
+
+A valid package returns HTTP 200 with `valid: true`, `compatible: false`, empty
+`issues`, and `runtime_unavailable` in `compatibilityIssues`. Required component
+capabilities are currently marked `capability_unavailable`. Invalid packages return
+HTTP 400; oversized bodies return HTTP 413. Issues contain only `path` and `code`,
+never binaries, configuration values or secrets. Installation of v2 returns HTTP
+409 with code `module_runtime_unavailable`. A successful preflight does not mean
+that installation or execution is supported.
+
+Limits: 1–16 components, 1–3 platforms per component, 16 MiB per executable and
+48 MiB aggregate decoded binaries; request body at most 68 MiB. Per component:
+at most 32 fields, 32 unique required capabilities and 1–16 triggers. Intervals
+are 5–86400 seconds; event triggers name 1–32 unique events without wildcards.
+Event/capability names are lowercase dot-separated segments containing letters,
+digits, `_` and `-`, at most 128 characters. Existing ID/version limits apply.
+SHA-256 and ELF/PE platform headers are checked. Duplicate/unknown members,
+noncanonical field casing, trailing JSON and nonempty password defaults are rejected.
+
+See the [v2 schema](modules/module-package-v2.schema.json). Files in
+[examples](modules/examples/) are **documentation templates** with empty
+`binaries`: add compiled platform artifacts, base64 bytes and SHA-256 before
+validation. These files are not installable packages. The schema describes the
+shape; the Go backend also validates digests, decoded byte limits and platforms.
+
+Later stages add execution, grants, secrets, events, Agent actions and catalog
+support. Do not advertise v2 as compatible with the current marketplace or Agent.
+Custom JavaScript UI and long-running jobs are not supported by this stage.
+
 A module adds a collector and dashboard views. Upload its JSON package in dashboard settings, then assign it to a node, complete the fields, and enable it. The agent receives the assignment and matching executable automatically. A missing platform build results in `unsupported`.
 
 ## Trust and permissions
