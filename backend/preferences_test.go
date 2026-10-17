@@ -7,7 +7,7 @@ import (
 
 func TestPreferencesPersistAndRejectCSS(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newApp(dir)
+	a, err := openTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,7 +16,7 @@ func TestPreferencesPersistAndRejectCSS(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	a, err = newApp(dir)
+	a, err = openTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

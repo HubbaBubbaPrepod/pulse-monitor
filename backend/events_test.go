@@ -8,7 +8,7 @@ import (
 func TestEventsAndAcknowledgmentsSurviveRestart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestEventsAndAcknowledgmentsSurviveRestart(t *testing.T) {
 	if w := rawAuthRequest(a, "POST", "/api/events/all/ack", "{}", cookie, csrf); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

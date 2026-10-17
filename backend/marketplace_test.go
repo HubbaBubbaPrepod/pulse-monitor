@@ -37,7 +37,7 @@ func TestMarketplaceFetchRejectsRedirects(t *testing.T) {
 }
 
 func TestMarketplaceRequiresOwnerSession(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestMarketplaceRequiresOwnerSession(t *testing.T) {
 }
 
 func TestMarketplaceOptInAndInstallation(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestMarketplaceOptInAndInstallation(t *testing.T) {
 	if w := request(t, a, "POST", "/api/marketplace/install", input); w.Code != 409 {
 		t.Fatalf("duplicate: %d", w.Code)
 	}
-	b, err := newApp(a.dir)
+	b, err := openTestApp(t, a.dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestMarketplaceOptInAndInstallation(t *testing.T) {
 }
 
 func TestMarketplaceRejectsUnsafeSources(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func (w *extensionInstallBarrier) SetReadDeadline(time.Time) error {
 func TestMarketplaceV2RechecksPolicyAtInstallationBoundary(t *testing.T) {
 	for _, mode := range []string{"disabled", "identity"} {
 		t.Run(mode, func(t *testing.T) {
-			a, err := newTestApp(t.TempDir())
+			a, err := newTestApp(t, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}

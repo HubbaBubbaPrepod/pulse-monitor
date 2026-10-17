@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,18 +16,19 @@ import (
 )
 
 type server struct {
-	Source    string  `json:"source,omitempty"`
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Address   string  `json:"address"`
-	OS        string  `json:"os"`
-	Group     string  `json:"group"`
-	Online    bool    `json:"online"`
-	CPU       float64 `json:"cpu"`
-	Memory    float64 `json:"memory"`
-	Disk      float64 `json:"disk"`
-	Interval  int     `json:"interval"`
-	Threshold int     `json:"threshold"`
+	Source           string  `json:"source,omitempty"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Address          string  `json:"address"`
+	OS               string  `json:"os"`
+	Group            string  `json:"group"`
+	Online           bool    `json:"online"`
+	CPU              float64 `json:"cpu"`
+	Memory           float64 `json:"memory"`
+	Disk             float64 `json:"disk"`
+	Interval         int     `json:"interval"`
+	Threshold        int     `json:"threshold"`
+	LogRetentionDays *int    `json:"logRetentionDays,omitempty"`
 }
 type logEntry struct {
 	DataSource string `json:"dataSource,omitempty"`
@@ -49,7 +47,9 @@ type app struct {
 	mu            sync.RWMutex
 	writeMu       sync.Mutex
 	logMu         sync.RWMutex
+	storage       *sqliteStore
 	servers       []server
+	retentions    map[string]int
 	dir           string
 	started       time.Time
 	auth          *authState
@@ -63,7 +63,7 @@ type app struct {
 	moduleCancels map[string]context.CancelFunc
 }
 
-func newApp(dir string) (*app, error) {
+func newApp(dir string) (result *app, initErr error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
@@ -81,10 +81,28 @@ func newApp(dir string) (*app, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read server definitions: %w", err)
 	}
-	if err := a.migrateDemo(); err != nil {
-		return nil, err
+	if _, err := os.Stat(filepath.Join(dir, "pulse.db")); errors.Is(err, os.ErrNotExist) {
+		if err := a.migrateDemo(); err != nil {
+			return nil, err
+		}
 	}
 	a.auth, err = loadAuth(dir)
+	if err != nil {
+		return nil, err
+	}
+	a.storage, err = openSQLite(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if initErr != nil {
+			a.storage.Close()
+		}
+	}()
+	if err := a.storage.migrateLegacy(context.Background(), dir, a.servers); err != nil {
+		return nil, err
+	}
+	a.retentions, err = a.storage.retentionPolicies(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +125,8 @@ func (a *app) serverList() []server {
 	a.telemetryMu.RLock()
 	defer a.telemetryMu.RUnlock()
 	for i := range list {
+		days := a.retentions[list[i].ID]
+		list[i].LogRetentionDays = &days
 		if n := a.nodes[list[i].ID]; n != nil {
 			list[i].Source = "agent"
 			list[i].Online = n.Hash != "" && !n.Seen.IsZero() && time.Since(n.Seen) < 15*time.Second
@@ -200,93 +220,16 @@ func (a *app) persistServers(list []server) error {
 	return os.Rename(name, filepath.Join(a.dir, "servers.json"))
 }
 func (a *app) appendLog(entry logEntry) error {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return err
-	}
-	if entry.ID == "" {
-		entry.ID = hex.EncodeToString(bytes)
-	}
-	if entry.Time == "" {
-		entry.Time = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	a.logMu.Lock()
-	defer a.logMu.Unlock()
-	f, err := os.OpenFile(filepath.Join(a.dir, "logs.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := f.Write(data)
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	return errors.Join(writeErr, syncErr, closeErr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return a.storage.appendLogs(ctx, []logEntry{entry}, time.Now().UTC())
 }
 func (a *app) logHistory(id, level, source, query, before string, offset, limit int, category ...string) (logPage, error) {
-	result := logPage{Items: []logEntry{}}
-	a.logMu.RLock()
-	defer a.logMu.RUnlock()
-	f, err := os.Open(filepath.Join(a.dir, "logs.jsonl"))
-	if errors.Is(err, os.ErrNotExist) {
-		return result, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cat := ""
+	if len(category) > 0 {
+		cat = category[0]
 	}
-	if err != nil {
-		return result, err
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 4096), 64*1024)
-	matches := []logEntry{}
-	query = strings.ToLower(query)
-	var boundary time.Time
-	if before != "" {
-		boundary, err = time.Parse(time.RFC3339Nano, before)
-		if err != nil {
-			return result, err
-		}
-	}
-	for scanner.Scan() {
-		var entry logEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			return result, fmt.Errorf("decode log archive: %w", err)
-		}
-		if entry.DataSource == "" {
-			entry.DataSource = "demo"
-			if strings.HasPrefix(entry.ID, entry.ServerID+"-") {
-				entry.DataSource = "agent"
-			}
-		}
-		if !boundary.IsZero() {
-			stamp, err := time.Parse(time.RFC3339Nano, entry.Time)
-			if err != nil {
-				return result, fmt.Errorf("parse log timestamp: %w", err)
-			}
-			if stamp.After(boundary) {
-				continue
-			}
-		}
-		if entry.ServerID != id || (level != "" && entry.Level != level) || (source != "" && entry.Source != source) || !strings.Contains(strings.ToLower(entry.Source+" "+entry.Message+" "+entry.Time), query) {
-			continue
-		}
-		if len(category) > 0 && category[0] != "" && logCategory(entry) != category[0] {
-			continue
-		}
-		result.Total++
-		matches = append(matches, entry)
-		if len(matches) > offset+limit {
-			matches = matches[1:]
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return result, err
-	}
-	slices.Reverse(matches)
-	if offset < len(matches) {
-		result.Items = matches[offset:min(len(matches), offset+limit)]
-	}
-	return result, nil
+	return a.storage.queryLogs(ctx, id, level, source, query, before, offset, limit, cat)
 }

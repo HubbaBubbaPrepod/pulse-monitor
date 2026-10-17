@@ -33,7 +33,7 @@ func TestInstallReleasedDockerModule(t *testing.T) {
 	if hex.EncodeToString(digest[:]) != *releasedModuleSHA {
 		t.Fatal("Released package digest differs from the expected snapshot")
 	}
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestInstallInteractiveDockerModule(t *testing.T) {
 	if p.ID != "docker" || p.Version != *releasedModuleVersion || len(p.Components) != 1 || len(p.Components[0].Binaries) != 3 {
 		t.Fatal("Interactive package identity mismatch")
 	}
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

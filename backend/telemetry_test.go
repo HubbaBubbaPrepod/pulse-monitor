@@ -24,7 +24,7 @@ func reportRequest(a *app, id, token, body string) *httptest.ResponseRecorder {
 func TestAgentLifecycleAndRestart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestAgentLifecycleAndRestart(t *testing.T) {
 	if !s.Online || s.OS != "Windows 11" || s.CPU != 91 {
 		t.Fatalf("auto metadata: %+v", s)
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestAgentLifecycleAndRestart(t *testing.T) {
 
 func TestAgentInvalidReportDoesNotUpdateState(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestAgentInvalidReportDoesNotUpdateState(t *testing.T) {
 }
 
 func TestAgentLogDedupBeyondHistoryPage(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,21 @@ func TestAgentLogDedupBeyondHistoryPage(t *testing.T) {
 }
 
 func BenchmarkReceiveReportWithLogArchive(b *testing.B) {
-	a, err := newTestApp(b.TempDir())
+	dir := b.TempDir()
+	f, err := os.Create(filepath.Join(dir, "logs.jsonl"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < 10000; i++ {
+		line, _ := json.Marshal(logEntry{ID: fmt.Sprintf("historic-%d", i), ServerID: "production-01", DataSource: "agent", Time: "2026-10-01T00:00:00Z", Message: strings.Repeat("x", 3000)})
+		if _, err = f.Write(append(line, '\n')); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if err = f.Close(); err != nil {
+		b.Fatal(err)
+	}
+	a, err := newTestApp(b, dir)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -133,15 +147,6 @@ func BenchmarkReceiveReportWithLogArchive(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	f, err := os.Create(filepath.Join(a.dir, "logs.jsonl"))
-	if err != nil {
-		b.Fatal(err)
-	}
-	line, _ := json.Marshal(logEntry{ID: "historical", ServerID: "other-node", Message: strings.Repeat("x", 3000)})
-	for i := 0; i < 10000; i++ {
-		f.Write(append(line, '\n'))
-	}
-	f.Close()
 	logs := make([]logEntry, 20)
 	for i := range logs {
 		logs[i] = logEntry{Level: "INFO", Source: "system", Message: fmt.Sprintf("message %d", i)}
@@ -157,7 +162,7 @@ func BenchmarkReceiveReportWithLogArchive(b *testing.B) {
 
 func TestAgentLogBatchRecoversPartialRetry(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +171,7 @@ func TestAgentLogBatchRecoversPartialRetry(t *testing.T) {
 	if err := a.appendLog(first); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

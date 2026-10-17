@@ -33,7 +33,7 @@ func rawAuthRequest(a *app, method, path, body string, cookie *http.Cookie, csrf
 
 func TestExpiredSessionCannotReadMetrics(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestExpiredSessionCannotReadMetrics(t *testing.T) {
 
 func TestLoginAttemptsAreLimited(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestLoginAttemptsAreLimited(t *testing.T) {
 
 func TestAuthRequiresSessionForEveryMonitoringEndpoint(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestAuthRequiresSessionForEveryMonitoringEndpoint(t *testing.T) {
 func TestRegistrationPersistsOwnerAndClosesSetup(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestRegistrationPersistsOwnerAndClosesSetup(t *testing.T) {
 	if w := rawAuthRequest(a, "POST", "/api/auth/register", testCredentials, nil, ""); w.Code != 409 {
 		t.Fatalf("second owner allowed: %d", w.Code)
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestRegistrationPersistsOwnerAndClosesSetup(t *testing.T) {
 
 func TestLoginLogoutAndCSRF(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestLoginLogoutAndCSRF(t *testing.T) {
 func TestRegistrationRejectsWeakAndOversizePasswords(t *testing.T) {
 	t.Parallel()
 	for _, password := range []string{"short", strings.Repeat("x", 73)} {
-		a, err := newTestApp(t.TempDir())
+		a, err := newTestApp(t, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func TestRegistrationRejectsWeakAndOversizePasswords(t *testing.T) {
 
 func TestNewServerDoesNotTrustClientOperatingSystem(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestNewServerDoesNotTrustClientOperatingSystem(t *testing.T) {
 
 func TestGPUProcessMetrics(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,7 +36,7 @@ func snapshotModuleFiles(t *testing.T, root string) map[string][32]byte {
 	return out
 }
 func TestModuleCapabilitiesRequiresOwnerSession(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestModuleCapabilitiesRequiresOwnerSession(t *testing.T) {
 }
 func TestModulePreflightIsReadOnlyAndRedacted(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestModulePreflightIsReadOnlyAndRedacted(t *testing.T) {
 	}
 }
 func TestModulePreflightRejectsInvalidOrUnauthorizedRequests(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestModulePreflightRejectsInvalidOrUnauthorizedRequests(t *testing.T) {
 	}
 }
 func TestModulePreflightDoesNotEnableV2Installation(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

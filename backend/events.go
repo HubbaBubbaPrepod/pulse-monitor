@@ -1,15 +1,12 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"time"
 )
@@ -25,15 +22,19 @@ type monitorEvent struct {
 }
 
 func (a *app) loadEvents() error {
-	a.events = []monitorEvent{}
-	raw, err := os.ReadFile(filepath.Join(a.dir, "events.json"))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+	var err error
+	a.events, err = a.storage.loadEvents(context.Background())
+	return err
+}
+func (a *app) cacheEvents(events []monitorEvent) {
+	for _, event := range events {
+		if !slices.ContainsFunc(a.events, func(v monitorEvent) bool { return v.ID == event.ID }) {
+			a.events = append(a.events, event)
+		}
 	}
-	if err != nil {
-		return err
+	if len(a.events) > 500 {
+		a.events = slices.Clone(a.events[len(a.events)-500:])
 	}
-	return json.Unmarshal(raw, &a.events)
 }
 func (a *app) addEvent(id, title, text, level string, keys ...string) error {
 	a.eventMu.Lock()
@@ -50,19 +51,24 @@ func (a *app) addEvent(id, title, text, level string, keys ...string) error {
 			return nil
 		}
 	}
-	next := append(slices.Clone(a.events), monitorEvent{ID: eventID, ServerID: id, Title: title, Text: text, Time: time.Now().UTC().Format(time.RFC3339Nano), Level: level})
-	if err := saveJSON(filepath.Join(a.dir, "events.json"), next); err != nil {
+	event := monitorEvent{ID: eventID, ServerID: id, Title: title, Text: text, Time: time.Now().UTC().Format(time.RFC3339Nano), Level: level}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := a.storage.saveEvents(ctx, []monitorEvent{event}); err != nil {
 		return err
 	}
-	a.events = next
+	a.cacheEvents([]monitorEvent{event})
 	return nil
 }
-func (a *app) evaluateAgentEvents(id string, old, n *agentNode) error {
+func (a *app) buildAgentEvents(id string, old, n *agentNode) []monitorEvent {
+	rows := []monitorEvent{}
 	key := fmt.Sprintf("%s-%s-%d", id, n.Report.BootID, n.Report.Sequence)
+	add := func(title, text, level, key string) {
+		digest := sha256.Sum256([]byte(key))
+		rows = append(rows, monitorEvent{ID: hex.EncodeToString(digest[:]), ServerID: id, Title: title, Text: text, Level: level, Time: n.Seen.UTC().Format(time.RFC3339Nano)})
+	}
 	if old.Seen.IsZero() || time.Since(old.Seen) >= 15*time.Second {
-		if err := a.addEvent(id, "Агент подключён", "Начат приём данных от узла.", "INFO", key+"-online"); err != nil {
-			return err
-		}
+		add("Агент подключён", "Начат приём данных от узла.", "INFO", key+"-online")
 	}
 	s, _ := a.findServer(id)
 	for _, metric := range []struct {
@@ -76,11 +82,19 @@ func (a *app) evaluateAgentEvents(id string, old, n *agentNode) error {
 			if after {
 				title, level = "Превышен порог нагрузки", "WARN"
 			}
-			if err := a.addEvent(id, title, fmt.Sprintf("%s: %.1f%%, порог %d%%.", metric.name, metric.after, s.Threshold), level, key+metric.name); err != nil {
-				return err
-			}
+			add(title, fmt.Sprintf("%s: %.1f%%, порог %d%%.", metric.name, metric.after, s.Threshold), level, key+metric.name)
 		}
 	}
+	return rows
+}
+func (a *app) evaluateAgentEvents(id string, old, n *agentNode) error {
+	events := a.buildAgentEvents(id, old, n)
+	a.eventMu.Lock()
+	defer a.eventMu.Unlock()
+	if err := a.storage.saveEvents(context.Background(), events); err != nil {
+		return err
+	}
+	a.cacheEvents(events)
 	return nil
 }
 func diskLoad(rows []disk) float64 {
@@ -134,23 +148,20 @@ func (a *app) eventRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/events/{id}/ack", func(w http.ResponseWriter, r *http.Request) {
 		a.eventMu.Lock()
 		defer a.eventMu.Unlock()
-		next := slices.Clone(a.events)
-		found := false
-		for i := range next {
-			if r.PathValue("id") == "all" || next[i].ID == r.PathValue("id") {
-				next[i].Acknowledged = true
-				found = true
-			}
+		found, err := a.storage.ackEvents(r.Context(), r.PathValue("id"))
+		if err != nil {
+			apiError(w, 500, "Could not save acknowledgment")
+			return
 		}
 		if !found && r.PathValue("id") != "all" {
 			apiError(w, 404, "Event not found")
 			return
 		}
-		if err := saveJSON(filepath.Join(a.dir, "events.json"), next); err != nil {
-			apiError(w, 500, "Could not save acknowledgment")
-			return
+		for i := range a.events {
+			if r.PathValue("id") == "all" || a.events[i].ID == r.PathValue("id") {
+				a.events[i].Acknowledged = true
+			}
 		}
-		a.events = next
 		writeJSON(w, 200, map[string]bool{"acknowledged": true})
 	})
 }

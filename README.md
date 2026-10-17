@@ -106,3 +106,5 @@ UI: `http://127.0.0.1:3000`, API: `http://127.0.0.1:8080`. Production-сборк
 [Руководство участника](CONTRIBUTING.ru.md) описывает проверки и процесс изменений. Сообщайте о проблемах через [Issues](https://github.com/HubbaBubbaPrepod/pulse-monitor/issues), приложив версию и обезличенные журналы.
 
 Код распространяется под [MIT](LICENSE). Иконки брендов: [Simple Icons](https://github.com/simple-icons/simple-icons), CC0; остальные — [Lucide](https://github.com/lucide-icons/lucide), ISC. Зависимости сохраняют собственные лицензии.
+
+Хранилище SQLite, обновление и резервные копии: [документация](docs/STORAGE.md).

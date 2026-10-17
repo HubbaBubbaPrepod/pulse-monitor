@@ -10,7 +10,7 @@ import (
 
 func TestCleanRegistryAndLastNodeDeletion(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newApp(dir)
+	a, err := openTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestCleanRegistryAndLastNodeDeletion(t *testing.T) {
 	if w := request(t, a, "DELETE", "/api/servers/node", ""); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	a, err = newApp(dir)
+	a, err = openTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestDemoMigrationPreservesRealRecords(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "servers.json"), raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	a, err := newApp(dir)
+	a, err := openTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

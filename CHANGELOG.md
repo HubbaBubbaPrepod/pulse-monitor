@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Store telemetry receipts, logs, metric history and events in SQLite WAL with resumable legacy import and consistent snapshot backups. Add per-server receipt-time log retention; migrated nodes keep cleanup disabled.
+
 - Add native v2 Agent/Monitor interval and manual components with explicit scoped grants,
   private configuration/state, persistent operations and non-replaying uncertain outcomes.
 - Add generic component settings and table/standalone actions, selected-object logs,

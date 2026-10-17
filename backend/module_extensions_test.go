@@ -30,7 +30,7 @@ func installExtensionFixture(t *testing.T, a *app, location string) {
 }
 
 func TestModuleExtensionConfigurationProtectsSecretsAndGrants(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestModuleExtensionConfigurationProtectsSecretsAndGrants(t *testing.T) {
 
 func TestModuleExtensionAgentClaimIsScopedAndNeverReplayed(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestModuleExtensionAgentClaimIsScopedAndNeverReplayed(t *testing.T) {
 	if w := request(t, a, "POST", "/api/extensions/example/components/a/operations?server=production-01", `{"action":"stop","input":{"containerId":"target"}}`); w.Code != 409 {
 		t.Fatal("conflicting action accepted", w.Code, w.Body.String())
 	}
-	a, err = newTestApp(dir)
+	a, err = newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestModuleExtensionAgentClaimIsScopedAndNeverReplayed(t *testing.T) {
 }
 
 func TestModuleExtensionReinstallNeverRestoresOldGrants(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestModuleExtensionReinstallNeverRestoresOldGrants(t *testing.T) {
 }
 
 func TestModuleExtensionConfigurationChangeRevokesQueuedOperations(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestModuleExtensionConfigurationChangeRevokesQueuedOperations(t *testing.T)
 	}
 }
 func TestModuleExtensionAgentSerializesClaimsAndPersistsTarget(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestModuleExtensionAgentSerializesClaimsAndPersistsTarget(t *testing.T) {
 	}
 }
 func TestModuleExtensionUpgradeCannotExposeFormerPasswordField(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestModuleExtensionUpgradeCannotExposeFormerPasswordField(t *testing.T) {
 	}
 }
 func TestModuleExtensionRejectsCaseAliasPackageID(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestModuleExtensionRejectsCaseAliasPackageID(t *testing.T) {
 	}
 }
 func TestModuleScopePathsPreserveServerCaseIdentity(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

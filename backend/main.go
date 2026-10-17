@@ -25,8 +25,14 @@ func run() error {
 	staticDir := flag.String("static", "out", "Next.js static export directory")
 	tlsCert := flag.String("tls-cert", "", "PEM certificate for HTTPS")
 	tlsKey := flag.String("tls-key", "", "PEM private key for HTTPS")
+	backupPath := flag.String("backup", "", "Write a consistent SQLite snapshot to a new file and exit")
 	publicURL := flag.String("public-url", "", "Canonical HTTPS URL for remote deployment")
 	flag.Parse()
+	if *backupPath != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		return backupExistingSQLite(ctx, *dataDir, *backupPath)
+	}
 	host, _, err := net.SplitHostPort(*addr)
 	if err != nil {
 		return err
@@ -50,6 +56,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer a.storage.Close()
 	if remote && a.auth.account == nil {
 		return errors.New("create the owner account on loopback before enabling remote access")
 	}
@@ -92,10 +99,11 @@ func run() error {
 	})
 	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	var workers sync.WaitGroup
-	workers.Add(3)
+	workers.Add(4)
 	go func() { defer workers.Done(); errCh <- a.collect(ctx) }()
+	go func() { defer workers.Done(); errCh <- a.runLogRetention(ctx) }()
 	go func() { defer workers.Done(); errCh <- a.runModuleRuntime(ctx) }()
 	go func() {
 		defer workers.Done()

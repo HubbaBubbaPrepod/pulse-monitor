@@ -1,9 +1,10 @@
 package main
 
 import "os"
+import "testing"
 import "path/filepath"
 
-func newTestApp(dir string) (*app, error) {
+func newTestApp(tb testing.TB, dir string) (*app, error) {
 	if _, err := os.Stat(filepath.Join(dir, "servers.json")); os.IsNotExist(err) {
 		nodes := []server{}
 		for _, id := range []string{"production-01", "windows-02", "backup-03"} {
@@ -16,5 +17,13 @@ func newTestApp(dir string) (*app, error) {
 			return nil, err
 		}
 	}
-	return newApp(dir)
+	return openTestApp(tb, dir)
+}
+
+func openTestApp(tb testing.TB, dir string) (*app, error) {
+	a, err := newApp(dir)
+	if err == nil {
+		tb.Cleanup(func() { a.storage.Close() })
+	}
+	return a, err
 }

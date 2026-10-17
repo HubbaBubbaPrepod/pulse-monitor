@@ -594,5 +594,15 @@
   "Logs": "Logs",
   "Start": "Start",
   "Restart": "Restart",
-  "Stop": "Stop"
+  "Stop": "Stop",
+  "Укажите целое число дней от 1 до 3650 или отключите очистку": "Enter whole days from 1 to 3650, or disable cleanup",
+  "Подтвердите удаление старых логов": "Confirm deletion of old logs",
+  "Хранение логов в Monitor": "Log retention in Monitor",
+  "Не удалять автоматически": "Do not delete automatically",
+  "дней": "days",
+  "Свой срок": "Custom period",
+  "Срок хранения, дней": "Retention period, days",
+  "Срок считается с момента записи в Monitor. Логи на самом сервере не удаляются. Метрики и события сохраняются отдельно.": "Retention starts when Monitor stores each entry. Source logs on the server are not deleted. Metrics and events have separate storage.",
+  "Записи старше выбранного срока будут удаляться без возможности восстановления из Monitor.": "Entries older than the selected period will be permanently removed from Monitor.",
+  "Подтверждаю удаление старых логов": "I confirm deletion of old logs"
 }

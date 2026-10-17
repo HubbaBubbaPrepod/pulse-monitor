@@ -55,6 +55,7 @@ func (a *app) handler() http.Handler {
 	a.authRoutes(mux)
 	a.agentRoutes(mux)
 	a.eventRoutes(mux)
+	a.retentionRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.moduleRoutes(mux)
 	a.marketplaceRoutes(mux)
@@ -98,6 +99,7 @@ func (a *app) handler() http.Handler {
 			s.Memory = old.Memory
 			s.Disk = old.Disk
 		}
+		s.LogRetentionDays = nil
 		if err := validateServer(s); err != nil {
 			apiError(w, 400, err.Error())
 			return
@@ -117,12 +119,21 @@ func (a *app) handler() http.Handler {
 		} else {
 			list[i] = s
 		}
+		if i < 0 {
+			if err := a.storage.setRetention(r.Context(), s.ID, 30); err != nil {
+				apiError(w, 500, "Could not save log retention")
+				return
+			}
+		}
 		if err := a.persistServers(list); err != nil {
 			apiError(w, 500, "Could not save server")
 			return
 		}
 		a.mu.Lock()
 		a.servers = list
+		if i < 0 {
+			a.retentions[s.ID] = 30
+		}
 		a.mu.Unlock()
 		writeJSON(w, 200, s)
 	})
@@ -204,7 +215,7 @@ func (a *app) handler() http.Handler {
 			apiError(w, 400, "Invalid log category")
 			return
 		}
-		page, err := a.logHistory(id, q.Get("level"), q.Get("source"), q.Get("q"), q.Get("before"), offset, limit, q.Get("category"))
+		page, err := a.storage.queryLogs(r.Context(), id, q.Get("level"), q.Get("source"), q.Get("q"), q.Get("before"), offset, limit, q.Get("category"))
 		if err != nil {
 			apiError(w, 500, "Could not read log archive")
 			return

@@ -1,4 +1,5 @@
 export type Server = {
+  logRetentionDays?: number;
   source?: 'agent' | 'waiting';
   id: string;
   name: string;

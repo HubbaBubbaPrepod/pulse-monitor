@@ -11,7 +11,7 @@ import (
 )
 
 func TestExtensionUploadAllowsBoundedSlowTransfer(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestExtensionUploadAllowsBoundedSlowTransfer(t *testing.T) {
 }
 
 func TestModuleSchedulerQueuesOnlyEnabledIntervalWork(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

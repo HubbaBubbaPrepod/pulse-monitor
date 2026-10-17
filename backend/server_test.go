@@ -40,7 +40,7 @@ func TestAPIErrorsExposeStableCodeAndDiagnostic(t *testing.T) {
 
 func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestRealtimeStreamDeliversUpdatesAndCancels(t *testing.T) {
 
 func TestOriginGuard(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func request(t *testing.T, a *app, method, path, body string) *httptest.Response
 
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestBootstrap(t *testing.T) {
 
 func TestArchiveBoundaryComparesInstants(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestArchiveBoundaryComparesInstants(t *testing.T) {
 func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestLogHistorySurvivesRestartAndFiltersOldRecords(t *testing.T) {
 func TestServerMutationsValidateAndPersist(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestServerMutationsValidateAndPersist(t *testing.T) {
 	if w := request(t, a, "PUT", "/api/servers/test-node", body); w.Code != 200 {
 		t.Fatalf("save status: %d: %s", w.Code, w.Body.String())
 	}
-	restarted, err := newTestApp(dir)
+	restarted, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestServerMutationsValidateAndPersist(t *testing.T) {
 }
 
 func TestWaitingSnapshotDoesNotFabricateTelemetry(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestWaitingSnapshotDoesNotFabricateTelemetry(t *testing.T) {
 
 func TestHostGuardRejectsDNSRebinding(t *testing.T) {
 	t.Parallel()
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

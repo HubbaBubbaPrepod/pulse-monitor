@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -75,49 +75,9 @@ func saveJSON(path string, value any) error {
 func (a *app) nodePath(id string) string    { return filepath.Join(a.dir, "agents", id+".json") }
 func (a *app) historyPath(id string) string { return filepath.Join(a.dir, "agents", id+".jsonl") }
 func (a *app) loadTelemetry() error {
-	a.nodes = map[string]*agentNode{}
-	if err := os.MkdirAll(filepath.Join(a.dir, "agents"), 0700); err != nil {
-		return err
-	}
-	for _, s := range a.servers {
-		raw, err := os.ReadFile(a.nodePath(s.ID))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		n := new(agentNode)
-		if err := json.Unmarshal(raw, n); err != nil {
-			return fmt.Errorf("agent %s: %w", s.ID, err)
-		}
-		n.Seen = time.Time{}
-		n.Restored = true
-		f, err := os.Open(a.historyPath(s.ID))
-		if err == nil {
-			scan := bufio.NewScanner(f)
-			for scan.Scan() {
-				var v sample
-				if err := json.Unmarshal(scan.Bytes(), &v); err != nil {
-					f.Close()
-					return err
-				}
-				stamp, _ := time.Parse(time.RFC3339Nano, v.At)
-				if time.Since(stamp) <= 24*time.Hour {
-					n.History = append(n.History, v)
-				}
-			}
-			scanErr := scan.Err()
-			f.Close()
-			if scanErr != nil {
-				return scanErr
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		a.nodes[s.ID] = n
-	}
-	return nil
+	var err error
+	a.nodes, err = a.storage.loadNodes(context.Background(), a.servers)
+	return err
 }
 func (a *app) issueAgentToken(id string) (string, error) {
 	a.ingestMu.Lock()
@@ -143,7 +103,7 @@ func (a *app) issueAgentToken(id string) (string, error) {
 	n.Report.BootID = ""
 	n.Report.Sequence = 0
 	n.RetiredBoots = nil
-	if err := saveJSON(a.nodePath(id), n); err != nil {
+	if err := a.storage.saveNode(context.Background(), id, &n); err != nil {
 		return "", err
 	}
 	a.telemetryMu.Lock()
@@ -178,7 +138,7 @@ func (a *app) agentRoutes(mux *http.ServeMux) {
 		n := *old
 		n.Hash = ""
 		n.Seen = time.Time{}
-		if err := saveJSON(a.nodePath(id), n); err != nil {
+		if err := a.storage.saveNode(context.Background(), id, &n); err != nil {
 			apiError(w, 500, "Could not revoke token")
 			return
 		}
@@ -239,8 +199,6 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	hash := sha256.Sum256([]byte(token))
 	encoded := hex.EncodeToString(hash[:])
-	a.ingestMu.Lock()
-	defer a.ingestMu.Unlock()
 	a.telemetryMu.RLock()
 	old := a.nodes[id]
 	a.telemetryMu.RUnlock()
@@ -264,6 +222,15 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err.Error())
 		return
 	}
+	a.ingestMu.Lock()
+	defer a.ingestMu.Unlock()
+	a.telemetryMu.RLock()
+	old = a.nodes[id]
+	a.telemetryMu.RUnlock()
+	if old == nil || old.Hash == "" || subtle.ConstantTimeCompare([]byte(old.Hash), []byte(encoded)) != 1 {
+		apiError(w, 401, "Invalid agent credentials")
+		return
+	}
 	if slices.Contains(old.RetiredBoots, report.BootID) {
 		apiError(w, 409, "Superseded agent instance")
 		return
@@ -271,6 +238,10 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	if report.BootID == old.Report.BootID && report.Sequence <= old.Report.Sequence {
 		n := *old
 		n.Seen = time.Now().UTC()
+		if err := a.storage.saveNode(r.Context(), id, &n); err != nil {
+			apiError(w, 500, "Could not save report")
+			return
+		}
 		a.telemetryMu.Lock()
 		a.nodes[id] = &n
 		a.telemetryMu.Unlock()
@@ -291,19 +262,8 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	n.Seen = now
 	n.Restored = false
 	n.History = slices.Clone(old.History)
-	if len(n.History) == 0 || sampleAge(n.History[len(n.History)-1], now) >= 10*time.Second {
-		f, err := os.OpenFile(a.historyPath(id), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			apiError(w, 500, "Could not save history")
-			return
-		}
-		err = json.NewEncoder(f).Encode(report.Sample)
-		syncErr := f.Sync()
-		closeErr := f.Close()
-		if errors.Join(err, syncErr, closeErr) != nil {
-			apiError(w, 500, "Could not save history")
-			return
-		}
+	saveSample := len(n.History) == 0 || sampleAge(n.History[len(n.History)-1], now) >= 10*time.Second
+	if saveSample {
 		n.History = append(n.History, report.Sample)
 	}
 	for len(n.History) > 0 && sampleAge(n.History[0], now) > 24*time.Hour {
@@ -315,19 +275,15 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 		logs[i].DataSource = "agent"
 		logs[i].ID = fmt.Sprintf("%s-%s-%d-%d", id, report.BootID, report.Sequence, i)
 	}
-	if err := a.appendAgentLogs(logs); err != nil {
-		apiError(w, 500, "Could not save logs")
-		return
-	}
-	if err := a.evaluateAgentEvents(id, old, &n); err != nil {
-		apiError(w, 500, "Could not save events")
-		return
-	}
-	n.Seen = time.Now().UTC()
-	if err := saveJSON(a.nodePath(id), n); err != nil {
+	events := a.buildAgentEvents(id, old, &n)
+	a.eventMu.Lock()
+	if err := a.storage.commitReport(r.Context(), id, &n, saveSample, logs, events); err != nil {
+		a.eventMu.Unlock()
 		apiError(w, 500, "Could not save report")
 		return
 	}
+	a.cacheEvents(events)
+	a.eventMu.Unlock()
 	a.telemetryMu.Lock()
 	a.nodes[id] = &n
 	a.telemetryMu.Unlock()
@@ -344,66 +300,9 @@ func (a *app) appendAgentLog(l logEntry) error {
 // Retry deduplication scans the archive once per report, never once per line.
 // A single synced append keeps acknowledgements durable, including partial retries.
 func (a *app) appendAgentLogs(rows []logEntry) error {
-	if len(rows) == 0 {
-		return nil
-	}
-	a.logMu.Lock()
-	defer a.logMu.Unlock()
-	path := filepath.Join(a.dir, "logs.jsonl")
-	wanted := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		wanted[row.ID] = true
-	}
-	f, err := os.Open(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err == nil {
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 4096), 64*1024)
-		for scanner.Scan() {
-			var entry struct {
-				ID string `json:"id"`
-			}
-			if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-				f.Close()
-				return fmt.Errorf("decode log archive: %w", err)
-			}
-			delete(wanted, entry.ID)
-		}
-		scanErr := scanner.Err()
-		closeErr := f.Close()
-		if err := errors.Join(scanErr, closeErr); err != nil {
-			return err
-		}
-	}
-	var data strings.Builder
-	for _, entry := range rows {
-		if !wanted[entry.ID] {
-			continue
-		}
-		if entry.Time == "" {
-			entry.Time = time.Now().UTC().Format(time.RFC3339Nano)
-		}
-		raw, err := json.Marshal(entry)
-		if err != nil {
-			return err
-		}
-		data.Write(raw)
-		data.WriteByte('\n')
-		delete(wanted, entry.ID)
-	}
-	if data.Len() == 0 {
-		return nil
-	}
-	f, err = os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := io.WriteString(f, data.String())
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	return errors.Join(writeErr, syncErr, closeErr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return a.storage.appendLogs(ctx, rows, time.Now().UTC())
 }
 func (a *app) resetAgent(id string, clear bool) error {
 	a.ingestMu.Lock()
@@ -420,7 +319,7 @@ func (a *app) resetAgent(id string, clear bool) error {
 	if clear {
 		n.Report = agentReport{}
 	}
-	if err := saveJSON(a.nodePath(id), n); err != nil {
+	if err := a.storage.saveNode(context.Background(), id, &n); err != nil {
 		return err
 	}
 	a.telemetryMu.Lock()

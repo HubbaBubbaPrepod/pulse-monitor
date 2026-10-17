@@ -1,0 +1,9 @@
+CREATE TABLE storage_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE import_progress(name TEXT PRIMARY KEY, offset INTEGER NOT NULL, imported INTEGER NOT NULL);
+CREATE TABLE agent_nodes(id TEXT PRIMARY KEY COLLATE BINARY, body BLOB NOT NULL);
+CREATE TABLE metric_samples(server_id TEXT NOT NULL COLLATE BINARY, at_ns INTEGER NOT NULL, body BLOB NOT NULL, PRIMARY KEY(server_id,at_ns));
+CREATE TABLE collected_logs(row_no INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, server_id TEXT NOT NULL COLLATE BINARY, source_ns INTEGER NOT NULL, received_ns INTEGER NOT NULL, level TEXT NOT NULL, source TEXT NOT NULL, category TEXT NOT NULL, search TEXT NOT NULL, body BLOB NOT NULL);
+CREATE INDEX logs_node_page ON collected_logs(server_id,row_no DESC);
+CREATE INDEX logs_node_retention ON collected_logs(server_id,received_ns,row_no);
+CREATE TABLE monitor_events(row_no INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,server_id TEXT NOT NULL COLLATE BINARY,body BLOB NOT NULL);
+CREATE TABLE log_retention(server_id TEXT PRIMARY KEY COLLATE BINARY,days INTEGER NOT NULL CHECK(days BETWEEN 0 AND 3650));

@@ -37,7 +37,7 @@ func (b *delayedModuleBody) Read(p []byte) (int, error) {
 }
 
 func TestModuleUploadAllowsBoundedSlowTransfer(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func installTestModule(t *testing.T, a *app, m moduleManifest) *httptest.Respons
 }
 
 func TestDisabledModuleDoesNotRequireConfiguration(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestDisabledModuleDoesNotRequireConfiguration(t *testing.T) {
 }
 
 func TestDeletedModuleCanBeReinstalledWithoutLosingData(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestDeletedModuleCanBeReinstalledWithoutLosingData(t *testing.T) {
 }
 
 func TestModuleRejectsBinaryForDifferentPlatform(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestModuleRejectsBinaryForDifferentPlatform(t *testing.T) {
 }
 
 func TestDeletedModuleRejectsChangedVersionBytes(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestDeletedModuleRejectsChangedVersionBytes(t *testing.T) {
 
 func TestModulePackageRejectsUnsafePathsAndWrongHash(t *testing.T) {
 	for _, raw := range []string{`{"schemaVersion":1,"id":"../escape","version":"1.0.0"}`, `{"schemaVersion":1,"id":"test","version":"1.0.0","protocol":1,"name":"Test","binaries":{"linux-amd64":{"sha256":"bad","content":"aGVsbG8="}}}`} {
-		a, err := newApp(t.TempDir())
+		a, err := openTestApp(t, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func TestModulePackageRejectsUnsafePathsAndWrongHash(t *testing.T) {
 	}
 }
 func TestModuleAgentAccessRequiresNodeToken(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestModuleAgentAccessRequiresNodeToken(t *testing.T) {
 
 func TestModuleLifecycleSurvivesRestartAndRevokesDisabledCollector(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newTestApp(dir)
+	a, err := newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestModuleLifecycleSurvivesRestartAndRevokesDisabledCollector(t *testing.T)
 	if w := installTestModule(t, a, m); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	a, err = newTestApp(dir)
+	a, err = newTestApp(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestModuleLifecycleSurvivesRestartAndRevokesDisabledCollector(t *testing.T)
 }
 
 func TestModuleOptionalCollectionsAreArrays(t *testing.T) {
-	a, err := newTestApp(t.TempDir())
+	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

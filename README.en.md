@@ -104,3 +104,5 @@ The [code of conduct](CODE_OF_CONDUCT.md) applies throughout project spaces.
 The [contributor guide](CONTRIBUTING.md) describes checks and the change process. Report problems through [Issues](https://github.com/HubbaBubbaPrepod/pulse-monitor/issues), including versions and redacted logs.
 
 Code is licensed under [MIT](LICENSE). Brand icons: [Simple Icons](https://github.com/simple-icons/simple-icons), CC0; other icons: [Lucide](https://github.com/lucide-icons/lucide), ISC. Dependencies retain their own licenses.
+
+SQLite storage, upgrades and backups: [documentation](docs/STORAGE.en.md).

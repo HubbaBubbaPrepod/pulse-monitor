@@ -9,6 +9,7 @@ import { Modal, PageHeading, PageMotion, Panel, SearchInput, Skeleton, Status } 
 import { addressLabel, validAddress, type Server } from '@/lib/data';
 import { OSIcon } from './icons';
 import { api } from '@/lib/monitor';
+import { parseRetentionDays, retentionNeedsConfirmation } from '@/lib/retention';
 function AgentSetup({ id }: { id: string }) {
   useLocale();
   const { notify } = useMonitor();
@@ -95,14 +96,33 @@ function AgentSetup({ id }: { id: string }) {
 function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void }) {
   useLocale();
   const { servers, saveServer, removeServer, notify } = useMonitor();
+  const [id] = useState(() => item?.id ?? crypto.randomUUID());
   const [name, setName] = useState(item?.name ?? '');
   const [address, setAddress] = useState(item?.address ?? '');
   const [group, setGroup] = useState(item?.group ?? 'Production');
   const [threshold, setThreshold] = useState(item?.threshold ?? 85);
+  const [retention, setRetention] = useState(String(item?.logRetentionDays ?? (item ? 0 : 30)));
+  const [customRetention, setCustomRetention] = useState(
+    !['0', '1', '7', '14', '30', '90'].includes(retention),
+  );
+  const [confirmRetention, setConfirmRetention] = useState(false);
+  const retentionValue = parseRetentionDays(retention);
+  const needsRetentionConfirmation =
+    !!item &&
+    retentionValue !== null &&
+    retentionNeedsConfirmation(item.logRetentionDays ?? 0, retentionValue);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   function validate() {
+    if (retentionValue === null) {
+      setError(tr('Укажите целое число дней от 1 до 3650 или отключите очистку'));
+      return false;
+    }
+    if (needsRetentionConfirmation && !confirmRetention) {
+      setError(tr('Подтвердите удаление старых логов'));
+      return false;
+    }
     if (!name.trim()) {
       setError(tr('Укажите название сервера'));
       return false;
@@ -111,9 +131,7 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
       setError(tr('Укажите URL узла: https://host без пароля и параметров'));
       return false;
     }
-    if (
-      servers.some((s) => s.id !== item?.id && s.name.toLowerCase() === name.trim().toLowerCase())
-    ) {
+    if (servers.some((s) => s.id !== id && s.name.toLowerCase() === name.trim().toLowerCase())) {
       setError(tr('Сервер с таким названием уже существует'));
       return false;
     }
@@ -126,7 +144,7 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
     setSaving(true);
     try {
       await saveServer({
-        id: item?.id ?? crypto.randomUUID(),
+        id,
         name: name.trim(),
         address: address.trim(),
         os: item?.os ?? '',
@@ -138,6 +156,12 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
         interval: item?.interval ?? 5,
         threshold,
       });
+      if (retentionValue !== null && (!item || retentionValue !== (item.logRetentionDays ?? 0))) {
+        await api(`/servers/${encodeURIComponent(id)}/log-retention`, {
+          method: 'PUT',
+          body: JSON.stringify({ days: retentionValue }),
+        });
+      }
       notify(item ? tr('Настройки сервера сохранены') : tr('Сервер добавлен'));
       onClose();
     } catch (e) {
@@ -213,6 +237,62 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
             />
             <small>{tr('Порог для CPU, памяти, GPU и заполнения дисков.')}</small>
           </label>
+          <label className="field">
+            {tr('Хранение логов в Monitor')}
+            <select
+              value={customRetention ? 'custom' : retention}
+              onChange={(e) => {
+                setCustomRetention(e.target.value === 'custom');
+                setRetention(e.target.value === 'custom' ? '' : e.target.value);
+                setConfirmRetention(false);
+              }}
+            >
+              <option value="0">{tr('Не удалять автоматически')}</option>
+              {[1, 7, 14, 30, 90].map((days) => (
+                <option key={days} value={String(days)}>
+                  {days} {tr('дней')}
+                </option>
+              ))}
+              <option value="custom">{tr('Свой срок')}</option>
+            </select>
+            {customRetention && (
+              <input
+                type="number"
+                min="1"
+                max="3650"
+                step="1"
+                value={retention}
+                placeholder="30"
+                aria-label={tr('Срок хранения, дней')}
+                onChange={(e) => {
+                  setRetention(e.target.value);
+                  setConfirmRetention(false);
+                }}
+              />
+            )}
+            <small>
+              {tr(
+                'Срок считается с момента записи в Monitor. Логи на самом сервере не удаляются. Метрики и события сохраняются отдельно.',
+              )}
+            </small>
+          </label>
+          {needsRetentionConfirmation && (
+            <label className="field">
+              <span>
+                {tr(
+                  'Записи старше выбранного срока будут удаляться без возможности восстановления из Monitor.',
+                )}
+              </span>
+              <span>
+                <input
+                  type="checkbox"
+                  checked={confirmRetention}
+                  onChange={(e) => setConfirmRetention(e.target.checked)}
+                />{' '}
+                {tr('Подтверждаю удаление старых логов')}
+              </span>
+            </label>
+          )}
           {trText(
             error ? (
               <p className="form-error" role="alert">
