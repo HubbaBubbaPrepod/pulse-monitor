@@ -264,6 +264,7 @@ func (a *app) agentAuthorized(r *http.Request) bool {
 	return n != nil && n.Hash != "" && subtle.ConstantTimeCompare([]byte(n.Hash), []byte(encoded)) == 1
 }
 func (a *app) moduleRoutes(mux *http.ServeMux) {
+	a.modulePreflightRoutes(mux)
 	mux.HandleFunc("GET /api/modules", func(w http.ResponseWriter, r *http.Request) {
 		a.writeMu.Lock()
 		defer a.writeMu.Unlock()
@@ -500,13 +501,31 @@ func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marke
 	r.Body = http.MaxBytesReader(w, r.Body, 68*1024*1024)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	var m moduleManifest
-	if err := decoder.Decode(&m); err != nil {
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
 		apiError(w, 400, "Invalid module package")
 		return
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		apiError(w, 400, "Expected one package")
+		return
+	}
+	var envelope struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		apiError(w, 400, "Invalid module package")
+		return
+	}
+	if envelope.SchemaVersion == 2 {
+		writeJSON(w, 409, map[string]string{"error": "Module runtime is not available", "code": "module_runtime_unavailable"})
+		return
+	}
+	var m moduleManifest
+	typed := json.NewDecoder(bytes.NewReader(raw))
+	typed.DisallowUnknownFields()
+	if err := typed.Decode(&m); err != nil {
+		apiError(w, 400, "Invalid module package")
 		return
 	}
 	if err := validateModule(m, true); err != nil {
