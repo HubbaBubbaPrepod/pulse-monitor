@@ -56,6 +56,20 @@ func TestModulePackageV2RejectsNonCanonicalFields(t *testing.T) {
 	}
 }
 
+func TestModulePackageV2RejectsJSONTypeCoercions(t *testing.T) {
+	for _, tc := range []struct{ name, raw string }{
+		{"binary array", `{"components":[{"binaries":{"linux-amd64":{"content":[1,2]}}}]}`},
+		{"null trigger field", `{"components":[{"triggers":[{"type":"manual","action":"inspect","seconds":null}]}]}`},
+		{"null optional string", `{"author":null}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := decodeModulePackageV2([]byte(tc.raw)); err == nil {
+				t.Fatal("accepted a JSON type outside the schema")
+			}
+		})
+	}
+}
+
 func TestModulePackageV2RejectsInvalidContract(t *testing.T) {
 	for _, tc := range []struct {
 		name string

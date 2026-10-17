@@ -44,13 +44,23 @@ type moduleTriggerV2 struct {
 
 // Reject duplicate members before typed decoding: encoding/json otherwise keeps
 // the last value and accepts case-insensitive field names.
-func uniqueJSONValue(d *json.Decoder, depth int) error {
+func uniqueJSONValue(d *json.Decoder, depth int, member ...string) error {
 	if depth > 64 {
 		return errors.New("JSON nesting exceeds limit")
 	}
 	token, err := d.Token()
 	if err != nil {
 		return err
+	}
+	if len(member) > 0 {
+		if token == nil && member[0] != "" && member[0] != "default" {
+			return errors.New("Null member is not allowed")
+		}
+		if member[0] == "content" {
+			if _, ok := token.(string); !ok {
+				return errors.New("Binary content must be base64 text")
+			}
+		}
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {
@@ -61,19 +71,21 @@ func uniqueJSONValue(d *json.Decoder, depth int) error {
 	}
 	seen := map[string]bool{}
 	for d.More() {
+		name := ""
 		if delim == '{' {
 			key, err := d.Token()
 			if err != nil {
 				return err
 			}
-			name, ok := key.(string)
+			var ok bool
+			name, ok = key.(string)
 			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64")
 			if !ok || seen[name] || !slices.Contains(allowed, name) {
 				return errors.New("Duplicate JSON member")
 			}
 			seen[name] = true
 		}
-		if err := uniqueJSONValue(d, depth+1); err != nil {
+		if err := uniqueJSONValue(d, depth+1, name); err != nil {
 			return err
 		}
 	}
