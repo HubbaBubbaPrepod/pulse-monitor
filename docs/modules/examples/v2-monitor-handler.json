@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "protocol": 2,
+  "id": "example",
+  "version": "2.0.0",
+  "name": "Example",
+  "author": "Module author",
+  "description": "Documentation template: add compiled artifacts before validation",
+  "permissions": [],
+  "components": [
+    {
+      "id": "notifications",
+      "location": "monitor",
+      "protocol": 2,
+      "requires": ["state.read"],
+      "fields": [
+        {
+          "label": "Bot token",
+          "type": "password",
+          "key": "token"
+        }
+      ],
+      "triggers": [
+        {
+          "events": ["server.offline"],
+          "type": "event"
+        }
+      ],
+      "binaries": {}
+    }
+  ]
+}

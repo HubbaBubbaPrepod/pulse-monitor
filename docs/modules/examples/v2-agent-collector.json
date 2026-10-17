@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "protocol": 2,
+  "id": "example",
+  "version": "2.0.0",
+  "name": "Example",
+  "author": "Module author",
+  "description": "Documentation template: add compiled artifacts before validation",
+  "permissions": [],
+  "components": [
+    {
+      "id": "collector",
+      "location": "agent",
+      "protocol": 2,
+      "requires": ["state.read"],
+      "fields": [],
+      "triggers": [
+        {
+          "seconds": 10,
+          "type": "interval"
+        }
+      ],
+      "binaries": {}
+    }
+  ]
+}

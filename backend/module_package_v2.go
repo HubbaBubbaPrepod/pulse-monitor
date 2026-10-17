@@ -1,0 +1,202 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"slices"
+	"strings"
+)
+
+type moduleValidationIssue struct {
+	Path string `json:"path"`
+	Code string `json:"code"`
+}
+type modulePackageV2 struct {
+	SchemaVersion int                 `json:"schemaVersion"`
+	Protocol      int                 `json:"protocol"`
+	ID            string              `json:"id"`
+	Version       string              `json:"version"`
+	Name          string              `json:"name"`
+	Author        string              `json:"author"`
+	Description   string              `json:"description"`
+	Permissions   []string            `json:"permissions"`
+	Components    []moduleComponentV2 `json:"components"`
+}
+type moduleComponentV2 struct {
+	ID       string                  `json:"id"`
+	Location string                  `json:"location"`
+	Protocol int                     `json:"protocol"`
+	Requires []string                `json:"requires"`
+	Fields   []moduleField           `json:"fields"`
+	Triggers []moduleTriggerV2       `json:"triggers"`
+	Binaries map[string]moduleBinary `json:"binaries"`
+}
+type moduleTriggerV2 struct {
+	Type    string    `json:"type"`
+	Seconds *int      `json:"seconds,omitempty"`
+	Events  *[]string `json:"events,omitempty"`
+	Action  *string   `json:"action,omitempty"`
+}
+
+// Reject duplicate members before typed decoding: encoding/json otherwise keeps
+// the last value and accepts case-insensitive field names.
+func uniqueJSONValue(d *json.Decoder, depth int) error {
+	if depth > 64 {
+		return errors.New("JSON nesting exceeds limit")
+	}
+	token, err := d.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	if delim != '{' && delim != '[' {
+		return errors.New("Invalid JSON delimiter")
+	}
+	seen := map[string]bool{}
+	for d.More() {
+		if delim == '{' {
+			key, err := d.Token()
+			if err != nil {
+				return err
+			}
+			name, ok := key.(string)
+			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64")
+			if !ok || seen[name] || !slices.Contains(allowed, name) {
+				return errors.New("Duplicate JSON member")
+			}
+			seen[name] = true
+		}
+		if err := uniqueJSONValue(d, depth+1); err != nil {
+			return err
+		}
+	}
+	_, err = d.Token()
+	return err
+}
+func decodeModulePackageV2(raw []byte) (modulePackageV2, error) {
+	var p modulePackageV2
+	if len(raw) > 68*1024*1024 || len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '{' {
+		return p, errors.New("Invalid package")
+	}
+	scan := json.NewDecoder(bytes.NewReader(raw))
+	if err := uniqueJSONValue(scan, 0); err != nil {
+		return p, errors.New("Ambiguous package JSON")
+	}
+	if _, err := scan.Token(); !errors.Is(err, io.EOF) {
+		return p, errors.New("Expected one package")
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&p); err != nil {
+		return p, errors.New("Invalid package fields")
+	}
+	return p, nil
+}
+
+var moduleCapabilityName = regexp.MustCompile(`^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*$`)
+
+func validModuleNames(names []string, limit int) bool {
+	if len(names) > limit {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		if len(name) > 128 || !moduleCapabilityName.MatchString(name) || seen[name] {
+			return false
+		}
+		seen[name] = true
+	}
+	return true
+}
+func validateModulePackageV2(p modulePackageV2) []moduleValidationIssue {
+	issues := []moduleValidationIssue{}
+	add := func(path, code string) { issues = append(issues, moduleValidationIssue{path, code}) }
+	if p.SchemaVersion != 2 || p.Protocol != 2 || !validID.MatchString(p.ID) || !moduleVersion.MatchString(p.Version) || len(p.Version) > 48 || len(p.Name) == 0 || len(p.Name) > 64 || len(p.Author) > 128 || len(p.Description) > 2048 || len(p.Permissions) > 16 {
+		add("package", "invalid_metadata")
+	}
+	for _, permission := range p.Permissions {
+		if len(permission) > 512 {
+			add("permissions", "invalid_permission")
+			break
+		}
+	}
+	if len(p.Components) < 1 || len(p.Components) > 16 {
+		add("components", "invalid_component_count")
+		return issues
+	}
+	seen := map[string]bool{}
+	total := 0
+	for i, c := range p.Components {
+		path := fmt.Sprintf("components.%d", i)
+		if !validID.MatchString(c.ID) || seen[c.ID] {
+			add(path+".id", "invalid_component_id")
+		}
+		seen[c.ID] = true
+		if !slices.Contains([]string{"agent", "monitor"}, c.Location) || c.Protocol != 2 {
+			add(path, "invalid_runtime")
+		}
+		if !validModuleNames(c.Requires, 32) {
+			add(path+".requires", "invalid_capability")
+		}
+		// Apply the existing platform, binary digest, field and metadata constraints.
+		legacy := moduleManifest{SchemaVersion: 1, Protocol: 1, ID: p.ID, Version: p.Version, Name: p.Name, Author: p.Author, Description: p.Description, Permissions: p.Permissions, Fields: c.Fields, Binaries: c.Binaries}
+		if validateModule(legacy, true) != nil {
+			add(path, "invalid_component_artifacts_or_fields")
+		}
+		for _, b := range c.Binaries {
+			total += len(b.Content)
+		}
+		for _, f := range c.Fields {
+			if f.Default == nil {
+				continue
+			}
+			switch f.Type {
+			case "password":
+				if f.Default != "" {
+					add(path+".fields", "secret_default_forbidden")
+				}
+			case "text":
+				v, ok := f.Default.(string)
+				if !ok || len(v) > 4096 {
+					add(path+".fields", "invalid_default")
+				}
+			case "number":
+				if _, ok := f.Default.(float64); !ok {
+					add(path+".fields", "invalid_default")
+				}
+			case "boolean":
+				if _, ok := f.Default.(bool); !ok {
+					add(path+".fields", "invalid_default")
+				}
+			}
+		}
+		if len(c.Triggers) < 1 || len(c.Triggers) > 16 {
+			add(path+".triggers", "invalid_trigger_count")
+		}
+		for j, t := range c.Triggers {
+			valid := false
+			switch t.Type {
+			case "interval":
+				valid = t.Seconds != nil && *t.Seconds >= 5 && *t.Seconds <= 86400 && t.Action == nil && t.Events == nil
+			case "event":
+				valid = c.Location == "monitor" && t.Events != nil && len(*t.Events) > 0 && validModuleNames(*t.Events, 32) && t.Action == nil && t.Seconds == nil
+			case "manual":
+				valid = t.Action != nil && validID.MatchString(*t.Action) && t.Events == nil && t.Seconds == nil
+			}
+			if !valid {
+				add(fmt.Sprintf("%s.triggers.%d", path, j), "invalid_trigger")
+			}
+		}
+	}
+	if total > 48*1024*1024 {
+		add("components", "package_too_large")
+	}
+	return issues
+}

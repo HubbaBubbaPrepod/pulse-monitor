@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulse.hubba-cloud.ru/schemas/module-package-v2.json",
+  "title": "Pulse module package v2",
+  "$comment": "Documentation schema. Binary digest, decoded byte limits, executable platform headers, UTF-8 byte limits, secret defaults and unique component/field IDs are additionally validated by the host. This URL is an identifier, not a claim of publication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "protocol", "id", "version", "name", "components"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "protocol": { "const": 2 },
+    "id": { "$ref": "#/$defs/id" },
+    "version": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9-]+)?$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "author": { "type": "string", "maxLength": 128 },
+    "description": { "type": "string", "maxLength": 2048 },
+    "permissions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "maxLength": 512 }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/component" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "names": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)*$"
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "type"],
+      "properties": {
+        "key": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "maxLength": 128 },
+        "type": { "enum": ["text", "password", "number", "boolean"] },
+        "required": { "type": "boolean" },
+        "default": { "type": ["string", "number", "boolean", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "text" } } },
+          "then": { "properties": { "default": { "type": ["string", "null"], "maxLength": 4096 } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "password" } } },
+          "then": { "properties": { "default": { "enum": ["", null] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "number" } } },
+          "then": { "properties": { "default": { "type": ["number", "null"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "boolean" } } },
+          "then": { "properties": { "default": { "type": ["boolean", "null"] } } }
+        }
+      ]
+    },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "content"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "content": { "type": "string", "minLength": 1, "contentEncoding": "base64" }
+      }
+    },
+    "trigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "seconds"],
+          "properties": {
+            "type": { "const": "interval" },
+            "seconds": { "type": "integer", "minimum": 5, "maximum": 86400 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "events"],
+          "properties": {
+            "type": { "const": "event" },
+            "events": { "allOf": [{ "$ref": "#/$defs/names" }], "minItems": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "action"],
+          "properties": { "type": { "const": "manual" }, "action": { "$ref": "#/$defs/id" } }
+        }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "location", "protocol", "triggers", "binaries"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "location": { "enum": ["agent", "monitor"] },
+        "protocol": { "const": 2 },
+        "requires": { "$ref": "#/$defs/names" },
+        "fields": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/field" } },
+        "triggers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/trigger" }
+        },
+        "binaries": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 3,
+          "additionalProperties": false,
+          "properties": {
+            "linux-amd64": { "$ref": "#/$defs/binary" },
+            "linux-arm64": { "$ref": "#/$defs/binary" },
+            "windows-amd64": { "$ref": "#/$defs/binary" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "location": { "const": "agent" } } },
+          "then": {
+            "properties": {
+              "triggers": {
+                "items": {
+                  "not": { "properties": { "type": { "const": "event" } }, "required": ["type"] }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
