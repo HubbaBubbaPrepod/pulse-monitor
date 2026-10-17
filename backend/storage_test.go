@@ -2,10 +2,47 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestSQLiteMigrationChecksumSurvivesGitLineEndings(t *testing.T) {
+	raw, err := storageSchemas.ReadFile("storage_schema/001_telemetry.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	for _, tc := range []struct{ name, sql string }{{"LF", canonical}, {"CRLF", strings.ReplaceAll(canonical, "\n", "\r\n")}} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			db, err := openSQLite(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := sha256.Sum256([]byte(tc.sql))
+			if _, err := db.writer.Exec("UPDATE schema_migrations SET checksum=?", hex.EncodeToString(digest[:])); err != nil {
+				t.Fatal(err)
+			}
+			db.Close()
+			next, err := openSQLite(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer next.Close()
+			var stored string
+			if err := next.reader.QueryRow("SELECT checksum FROM schema_migrations").Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			expected := sha256.Sum256([]byte(canonical))
+			if stored != hex.EncodeToString(expected[:]) {
+				t.Fatal("checksum not canonicalized")
+			}
+		})
+	}
+}
 
 func TestSQLiteLifecycleAndMigrationChecksum(t *testing.T) {
 	dir := t.TempDir()

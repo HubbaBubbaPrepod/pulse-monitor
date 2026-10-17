@@ -45,6 +45,14 @@ export type ExtensionConfiguration = {
   secrets?: string[];
   clearSecrets?: string[];
 };
+export function configurationUpdate(value: ExtensionConfiguration) {
+  return {
+    enabled: value.enabled,
+    config: value.config,
+    grants: value.grants,
+    ...(value.clearSecrets ? { clearSecrets: value.clearSecrets } : {}),
+  };
+}
 export type ExtensionOperation = {
   id: string;
   moduleId: string;

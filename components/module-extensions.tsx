@@ -11,6 +11,7 @@ import {
   componentEndpoint,
   operationMatches,
   actionAvailable,
+  configurationUpdate,
 } from '@/lib/module-extensions';
 import { type ModuleManifest, formatModuleValue } from '@/lib/modules';
 import { useLocale, tr, trText } from './locale';
@@ -82,7 +83,7 @@ function ConfigurationFields({
     try {
       await api(componentEndpoint(module.id, component.id, server, 'configuration'), {
         method: 'PUT',
-        body: JSON.stringify(config),
+        body: JSON.stringify(configurationUpdate(config)),
       });
       notify(tr('Настройки модуля сохранены'));
       window.dispatchEvent(new Event('pulse:modules'));

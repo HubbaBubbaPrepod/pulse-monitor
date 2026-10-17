@@ -132,13 +132,22 @@ func (s *sqliteStore) applySchema(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		sum := sha256.Sum256(raw)
+		canonical := strings.ReplaceAll(string(raw), "\r\n", "\n")
+		sum := sha256.Sum256([]byte(canonical))
 		digest := hex.EncodeToString(sum[:])
 		var old string
 		err = tx.QueryRowContext(ctx, "SELECT checksum FROM schema_migrations WHERE name=?", entry.Name()).Scan(&old)
 		if err == nil {
 			if old != digest {
-				return fmt.Errorf("migration checksum mismatch: %s", entry.Name())
+				// Early Windows builds embedded CRLF. Accept only that exact
+				// equivalent and store the portable LF checksum for later builds.
+				windowsSum := sha256.Sum256([]byte(strings.ReplaceAll(canonical, "\n", "\r\n")))
+				if old != hex.EncodeToString(windowsSum[:]) {
+					return fmt.Errorf("migration checksum mismatch: %s", entry.Name())
+				}
+				if _, err = tx.ExecContext(ctx, "UPDATE schema_migrations SET checksum=? WHERE name=?", digest, entry.Name()); err != nil {
+					return err
+				}
 			}
 			continue
 		}

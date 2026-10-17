@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Preserve migration checksums across Git LF/CRLF checkouts and send only writable module configuration fields from the settings UI.
+
 - Store telemetry receipts, logs, metric history and events in SQLite WAL with resumable legacy import and consistent snapshot backups. Add per-server receipt-time log retention; migrated nodes keep cleanup disabled.
 
 - Add native v2 Agent/Monitor interval and manual components with explicit scoped grants,
