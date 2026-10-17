@@ -309,19 +309,21 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	for len(n.History) > 0 && sampleAge(n.History[0], now) > 24*time.Hour {
 		n.History = n.History[1:]
 	}
-	for i, l := range report.Logs {
-		l.ServerID = id
-		l.DataSource = "agent"
-		l.ID = fmt.Sprintf("%s-%s-%d-%d", id, report.BootID, report.Sequence, i)
-		if err := a.appendAgentLog(l); err != nil {
-			apiError(w, 500, "Could not save logs")
-			return
-		}
+	logs := slices.Clone(report.Logs)
+	for i := range logs {
+		logs[i].ServerID = id
+		logs[i].DataSource = "agent"
+		logs[i].ID = fmt.Sprintf("%s-%s-%d-%d", id, report.BootID, report.Sequence, i)
+	}
+	if err := a.appendAgentLogs(logs); err != nil {
+		apiError(w, 500, "Could not save logs")
+		return
 	}
 	if err := a.evaluateAgentEvents(id, old, &n); err != nil {
 		apiError(w, 500, "Could not save events")
 		return
 	}
+	n.Seen = time.Now().UTC()
 	if err := saveJSON(a.nodePath(id), n); err != nil {
 		apiError(w, 500, "Could not save report")
 		return
@@ -336,14 +338,72 @@ func sampleAge(v sample, now time.Time) time.Duration {
 	return now.Sub(stamp)
 }
 func (a *app) appendAgentLog(l logEntry) error {
-	page, err := a.logHistory(l.ServerID, "", "", l.Message, "", 0, 200)
+	return a.appendAgentLogs([]logEntry{l})
+}
+
+// Retry deduplication scans the archive once per report, never once per line.
+// A single synced append keeps acknowledgements durable, including partial retries.
+func (a *app) appendAgentLogs(rows []logEntry) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	a.logMu.Lock()
+	defer a.logMu.Unlock()
+	path := filepath.Join(a.dir, "logs.jsonl")
+	wanted := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		wanted[row.ID] = true
+	}
+	f, err := os.Open(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 4096), 64*1024)
+		for scanner.Scan() {
+			var entry struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+				f.Close()
+				return fmt.Errorf("decode log archive: %w", err)
+			}
+			delete(wanted, entry.ID)
+		}
+		scanErr := scanner.Err()
+		closeErr := f.Close()
+		if err := errors.Join(scanErr, closeErr); err != nil {
+			return err
+		}
+	}
+	var data strings.Builder
+	for _, entry := range rows {
+		if !wanted[entry.ID] {
+			continue
+		}
+		if entry.Time == "" {
+			entry.Time = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			return err
+		}
+		data.Write(raw)
+		data.WriteByte('\n')
+		delete(wanted, entry.ID)
+	}
+	if data.Len() == 0 {
+		return nil
+	}
+	f, err = os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
-	if slices.ContainsFunc(page.Items, func(v logEntry) bool { return v.ID == l.ID }) {
-		return nil
-	}
-	return a.appendLog(l)
+	_, writeErr := io.WriteString(f, data.String())
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	return errors.Join(writeErr, syncErr, closeErr)
 }
 func (a *app) resetAgent(id string, clear bool) error {
 	a.ingestMu.Lock()
