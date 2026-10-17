@@ -92,10 +92,11 @@ func run() error {
 	})
 	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	var workers sync.WaitGroup
-	workers.Add(2)
+	workers.Add(3)
 	go func() { defer workers.Done(); errCh <- a.collect(ctx) }()
+	go func() { defer workers.Done(); errCh <- a.runModuleRuntime(ctx) }()
 	go func() {
 		defer workers.Done()
 		if *tlsCert != "" {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -45,19 +46,21 @@ type logPage struct {
 	Total int        `json:"total"`
 }
 type app struct {
-	mu          sync.RWMutex
-	writeMu     sync.Mutex
-	logMu       sync.RWMutex
-	servers     []server
-	dir         string
-	started     time.Time
-	auth        *authState
-	telemetryMu sync.RWMutex
-	ingestMu    sync.Mutex
-	nodes       map[string]*agentNode
-	publicHost  string
-	eventMu     sync.Mutex
-	events      []monitorEvent
+	mu            sync.RWMutex
+	writeMu       sync.Mutex
+	logMu         sync.RWMutex
+	servers       []server
+	dir           string
+	started       time.Time
+	auth          *authState
+	telemetryMu   sync.RWMutex
+	ingestMu      sync.Mutex
+	nodes         map[string]*agentNode
+	publicHost    string
+	eventMu       sync.Mutex
+	events        []monitorEvent
+	extensionMu   sync.Mutex
+	moduleCancels map[string]context.CancelFunc
 }
 
 func newApp(dir string) (*app, error) {
@@ -89,6 +92,10 @@ func newApp(dir string) (*app, error) {
 		return nil, err
 	}
 	if err := a.loadEvents(); err != nil {
+		return nil, err
+	}
+	a.moduleCancels = map[string]context.CancelFunc{}
+	if err := a.recoverModuleOperations(); err != nil {
 		return nil, err
 	}
 	return a, nil

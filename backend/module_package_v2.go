@@ -34,12 +34,23 @@ type moduleComponentV2 struct {
 	Fields   []moduleField           `json:"fields"`
 	Triggers []moduleTriggerV2       `json:"triggers"`
 	Binaries map[string]moduleBinary `json:"binaries"`
+	Views    []moduleViewV2          `json:"views,omitempty"`
+}
+type moduleViewV2 struct {
+	moduleView
+	RowKey  string   `json:"rowKey,omitempty"`
+	Actions []string `json:"actions,omitempty"`
 }
 type moduleTriggerV2 struct {
-	Type    string    `json:"type"`
-	Seconds *int      `json:"seconds,omitempty"`
-	Events  *[]string `json:"events,omitempty"`
-	Action  *string   `json:"action,omitempty"`
+	Type        string        `json:"type"`
+	Seconds     *int          `json:"seconds,omitempty"`
+	Events      *[]string     `json:"events,omitempty"`
+	Action      *string       `json:"action,omitempty"`
+	Label       string        `json:"label,omitempty"`
+	Mutating    bool          `json:"mutating,omitempty"`
+	InputFields []moduleField `json:"inputFields,omitempty"`
+	InputKey    string        `json:"inputKey,omitempty"`
+	ResultView  string        `json:"resultView,omitempty"`
 }
 
 // Reject duplicate members before typed decoding: encoding/json otherwise keeps
@@ -79,7 +90,7 @@ func uniqueJSONValue(d *json.Decoder, depth int, member ...string) error {
 			}
 			var ok bool
 			name, ok = key.(string)
-			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64")
+			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64 views rowKey actions kind title columns unit mutating inputFields inputKey resultView")
 			if !ok || seen[name] || !slices.Contains(allowed, name) {
 				return errors.New("Duplicate JSON member")
 			}
@@ -128,6 +139,9 @@ func validModuleNames(names []string, limit int) bool {
 	return true
 }
 func validateModulePackageV2(p modulePackageV2) []moduleValidationIssue {
+	return validateModulePackageV2Content(p, true)
+}
+func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleValidationIssue {
 	issues := []moduleValidationIssue{}
 	add := func(path, code string) { issues = append(issues, moduleValidationIssue{path, code}) }
 	if p.SchemaVersion != 2 || p.Protocol != 2 || !validID.MatchString(p.ID) || !moduleVersion.MatchString(p.Version) || len(p.Version) > 48 || len(p.Name) == 0 || len(p.Name) > 64 || len(p.Author) > 128 || len(p.Description) > 2048 || len(p.Permissions) > 16 {
@@ -159,7 +173,10 @@ func validateModulePackageV2(p modulePackageV2) []moduleValidationIssue {
 		}
 		// Apply the existing platform, binary digest, field and metadata constraints.
 		legacy := moduleManifest{SchemaVersion: 1, Protocol: 1, ID: p.ID, Version: p.Version, Name: p.Name, Author: p.Author, Description: p.Description, Permissions: p.Permissions, Fields: c.Fields, Binaries: c.Binaries}
-		if validateModule(legacy, true) != nil {
+		for _, v := range c.Views {
+			legacy.Views = append(legacy.Views, v.moduleView)
+		}
+		if validateModule(legacy, content) != nil {
 			add(path, "invalid_component_artifacts_or_fields")
 		}
 		for _, b := range c.Binaries {
@@ -202,8 +219,46 @@ func validateModulePackageV2(p modulePackageV2) []moduleValidationIssue {
 			case "manual":
 				valid = t.Action != nil && validID.MatchString(*t.Action) && t.Events == nil && t.Seconds == nil
 			}
+			if t.Type != "manual" && (t.Mutating || len(t.InputFields) > 0 || t.InputKey != "" || t.ResultView != "") {
+				valid = false
+			}
+			if len(t.Label) > 128 || !slices.Contains([]string{"", "logs", "cards", "table"}, t.ResultView) || len(t.InputFields) > 32 {
+				valid = false
+			}
+			inputKeys := map[string]bool{}
+			for _, f := range t.InputFields {
+				if !validID.MatchString(f.Key) || inputKeys[f.Key] || len(f.Label) > 128 || !slices.Contains([]string{"text", "password", "number", "boolean"}, f.Type) || f.Default != nil {
+					valid = false
+				}
+				inputKeys[f.Key] = true
+			}
+			if t.InputKey != "" && !inputKeys[t.InputKey] {
+				valid = false
+			}
 			if !valid {
 				add(fmt.Sprintf("%s.triggers.%d", path, j), "invalid_trigger")
+			}
+		}
+		actions := map[string]bool{}
+		for _, t := range c.Triggers {
+			if t.Action != nil {
+				if actions[*t.Action] {
+					add(path+".triggers", "duplicate_action")
+				}
+				actions[*t.Action] = true
+			}
+		}
+		for _, v := range c.Views {
+			if v.RowKey != "" && !validID.MatchString(v.RowKey) {
+				add(path+".views", "invalid_row_key")
+			}
+			if len(v.Actions) > 16 {
+				add(path+".views", "invalid_view_actions")
+			}
+			for _, action := range v.Actions {
+				if !actions[action] {
+					add(path+".views", "unknown_action")
+				}
 			}
 		}
 	}

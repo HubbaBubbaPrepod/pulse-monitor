@@ -265,6 +265,8 @@ func (a *app) agentAuthorized(r *http.Request) bool {
 }
 func (a *app) moduleRoutes(mux *http.ServeMux) {
 	a.modulePreflightRoutes(mux)
+	a.extensionRoutes(mux)
+	a.moduleOperationRoutes(mux)
 	mux.HandleFunc("GET /api/modules", func(w http.ResponseWriter, r *http.Request) {
 		a.writeMu.Lock()
 		defer a.writeMu.Unlock()
@@ -547,6 +549,10 @@ func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marke
 		}
 	}
 	root := filepath.Join(a.moduleRoot(), m.ID)
+	if _, err := os.Stat(filepath.Join(a.dir, "extensions", m.ID, "manifest.json")); !errors.Is(err, os.ErrNotExist) {
+		apiError(w, 409, "An extension with this ID is already installed")
+		return
+	}
 	version := filepath.Join(root, m.Version)
 	_, versionErr := os.Stat(version)
 	if versionErr == nil {
