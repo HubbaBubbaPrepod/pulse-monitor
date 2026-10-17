@@ -1,8 +1,9 @@
 {
   "name": "pulse-monitor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
+    "test": "node --experimental-strip-types --test scripts/module-version.test.mjs",
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "lint": "eslint .",

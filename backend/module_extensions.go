@@ -240,13 +240,14 @@ func (a *app) installExtensionPackage(w http.ResponseWriter, r *http.Request, ma
 			apiError(w, 409, "Marketplace settings changed")
 			return
 		}
-		if _, err := a.extension(p.ID); !errors.Is(err, os.ErrNotExist) {
-			apiError(w, 409, "Module ID already installed")
+		if err := a.checkMarketplaceUpdate(r, filepath.Join(a.dir, "extensions", p.ID), p.ID, p.Version, marketplace); err != nil {
+			apiError(w, 409, err.Error())
 			return
 		}
 	}
-	if _, err := a.module(p.ID); !errors.Is(err, os.ErrNotExist) {
-		apiError(w, 409, "Remove the legacy module before installing its v2 replacement; saved data remains")
+	legacy, legacyErr := a.module(p.ID)
+	if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
+		apiError(w, 409, "Could not read legacy module")
 		return
 	}
 	root := filepath.Join(a.dir, "extensions", p.ID)
@@ -307,11 +308,34 @@ func (a *app) installExtensionPackage(w http.ResponseWriter, r *http.Request, ma
 		apiError(w, 500, "Could not finalize extension")
 		return
 	}
-	if err := a.revokeExtensionConfigurations(p); err != nil {
-		apiError(w, 500, "Could not reset extension authorization")
+	if err := saveModuleSource(r, version); err != nil {
+		apiError(w, 500, "Could not save module publisher")
 		return
 	}
+	previous, previousErr := a.extension(p.ID)
+	if previousErr != nil && !errors.Is(previousErr, os.ErrNotExist) {
+		apiError(w, 500, "Could not read previous extension")
+		return
+	}
+	rollback, err := a.migrateExtensionConfigurations(previous, p)
+	if err != nil {
+		apiError(w, 500, "Could not migrate extension configuration")
+		return
+	}
+	legacyPath := filepath.Join(a.moduleRoot(), p.ID, "manifest.json")
+	legacyBackup := filepath.Join(a.moduleRoot(), p.ID, "manifest-retired-"+legacy.Version+".json")
+	if legacyErr == nil {
+		if err := os.Rename(legacyPath, legacyBackup); err != nil {
+			rollback()
+			apiError(w, 500, "Could not retire legacy module")
+			return
+		}
+	}
 	if err := saveJSON(filepath.Join(root, "manifest.json"), p); err != nil {
+		rollback()
+		if legacyErr == nil {
+			_ = os.Rename(legacyBackup, legacyPath)
+		}
 		apiError(w, 500, "Could not save extension manifest")
 		return
 	}

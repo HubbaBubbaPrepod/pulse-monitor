@@ -178,9 +178,16 @@ func (a *app) dataSource() string {
 var validID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func validateServer(s server) error {
-	u, err := url.Parse(s.Address)
-	if err != nil || u.Hostname() == "" || !slices.Contains([]string{"http", "https"}, u.Scheme) || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return errors.New("invalid HTTP(S) agent address")
+	// Push agents connect to the Monitor origin, never to this optional label.
+	address := strings.TrimSpace(s.Address)
+	if address != "" {
+		if !strings.Contains(address, "://") {
+			address = "https://" + address
+		}
+		u, err := url.Parse(address)
+		if err != nil || u.Hostname() == "" || len(address) > 512 || strings.ContainsAny(address, " \t\r\n") || !slices.Contains([]string{"http", "https"}, u.Scheme) || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("invalid optional server address")
+		}
 	}
 	if !validID.MatchString(s.ID) || strings.TrimSpace(s.Name) == "" || len(s.Name) > 48 || len(s.OS) > 80 || len(s.Group) > 32 {
 		return errors.New("invalid server identity")

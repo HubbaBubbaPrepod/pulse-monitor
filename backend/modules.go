@@ -547,8 +547,8 @@ func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marke
 			apiError(w, 409, "Marketplace settings changed")
 			return
 		}
-		if _, err := a.module(m.ID); !errors.Is(err, os.ErrNotExist) {
-			apiError(w, 409, "Module ID already installed")
+		if err := a.checkMarketplaceUpdate(r, filepath.Join(a.moduleRoot(), m.ID), m.ID, m.Version, marketplace); err != nil {
+			apiError(w, 409, err.Error())
 			return
 		}
 	}
@@ -603,6 +603,10 @@ func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marke
 		}
 		b.Content = nil
 		m.Binaries[target] = b
+	}
+	if err := saveModuleSource(r, stage); err != nil {
+		apiError(w, 500, "Could not save module publisher")
+		return
 	}
 	if err := os.Rename(stage, version); err != nil {
 		apiError(w, 500, "Could not finalize module")

@@ -46,7 +46,7 @@ flowchart LR
    ./pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
    ```
 
-4. Откройте HTTPS-адрес, войдите и добавьте узел. В настройках сохранённого узла создайте токен. Сохраните его на узле в защищённый файл `agent.token` без кавычек. Linux: `chmod 600 agent.token`; Windows: ограничьте ACL учётной записью службы, SYSTEM и администраторами.
+4. Откройте HTTPS-адрес, войдите и добавьте узел. Достаточно имени: адрес узла необязателен, сертификат и входящий порт на нём не нужны. В настройках сохранённого узла создайте токен. Сохраните его на узле в защищённый файл `agent.token` без кавычек. Linux: `chmod 600 agent.token`; Windows: ограничьте ACL учётной записью службы, SYSTEM и администраторами.
 5. Скачайте [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent/releases) и запустите:
 
    ```text

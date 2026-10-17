@@ -128,7 +128,7 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
       return false;
     }
     if (!validAddress(address)) {
-      setError(tr('Укажите URL узла: https://host без пароля и параметров'));
+      setError(tr('Укажите IP или домен без пароля и параметров'));
       return false;
     }
     if (servers.some((s) => s.id !== id && s.name.toLowerCase() === name.trim().toLowerCase())) {
@@ -201,15 +201,19 @@ function ServerEditor({ item, onClose }: { item?: Server; onClose: () => void })
             />
           </label>
           <label className="field">
-            {tr('Адрес узла')}
+            {tr('Адрес узла (необязательно)')}
             <input
               value={address}
               onChange={(e) => {
                 setAddress(e.target.value);
               }}
-              placeholder="https://192.168.1.10:9443"
+              placeholder="192.168.1.10"
             />
-            <small>{tr('Полный HTTP(S) адрес сервера')}</small>
+            <small>
+              {tr(
+                'Для справки. Агент сам подключается к Monitor; открывать порт и настраивать HTTPS на узле не нужно.',
+              )}
+            </small>
           </label>
           <div className="form-note">
             <OSIcon os={item?.os ?? ''} />
@@ -442,7 +446,7 @@ export function Servers() {
                               </Link>
                               <small>
                                 {trText(item.os || tr('Ожидаем агента'))} ·{' '}
-                                {trText(addressLabel(item.address))}
+                                {trText(addressLabel(item.address) || tr('Исходящее подключение'))}
                               </small>
                             </span>
                           </div>

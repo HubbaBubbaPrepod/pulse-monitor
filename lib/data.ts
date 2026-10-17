@@ -44,8 +44,11 @@ export type LogEntry = {
 };
 
 export function validAddress(value: string): boolean {
+  if (!value.trim()) return true;
   try {
-    const url = new URL(value);
+    const address = value.trim();
+    if (address.length > 512 || /\s/.test(address)) return false;
+    const url = new URL(address.includes('://') ? address : `https://${address}`);
     return (
       ['http:', 'https:'].includes(url.protocol) &&
       !!url.hostname &&

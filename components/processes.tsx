@@ -47,7 +47,9 @@ export function ProcessTable({
       {trText(
         rows.length ? (
           <div className="table-scroll">
-            <table className="process-table">
+            <table
+              className={`process-table ${values.some((p) => p.gpu != null) ? 'has-gpu' : ''}`}
+            >
               <thead>
                 <tr>
                   {trText(
@@ -126,7 +128,9 @@ export function ProcessTable({
                       <td className="mono muted">
                         {trText(process.gpuMemory == null ? '—' : memoryLabel(process.gpuMemory))}
                       </td>
-                      <td className="muted">{process.user}</td>
+                      <td className="muted process-user" title={process.user}>
+                        {process.user}
+                      </td>
                       <td>
                         <button
                           className="icon-button row-action"

@@ -36,6 +36,74 @@ func TestMarketplaceFetchRejectsRedirects(t *testing.T) {
 	}
 }
 
+func TestMarketplaceUpdatesAreBoundToPublisher(t *testing.T) {
+	a, err := newTestApp(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := collectorPackage(t)
+	owner := "Publisher"
+	var data []byte
+	var digest string
+	refresh := func() { data, _ = json.Marshal(p); h := sha256.Sum256(data); digest = hex.EncodeToString(h[:]) }
+	refresh()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/packages/") {
+			w.Write(data)
+			return
+		}
+		metadata := map[string]any{"owner": owner, "id": p.ID, "version": p.Version, "sha256": digest, "size": len(data)}
+		if !strings.Contains(r.URL.Path, "/versions/") {
+			writeJSON(w, 200, map[string]any{"versions": []any{metadata}})
+			return
+		}
+		writeJSON(w, 200, metadata)
+	}))
+	defer upstream.Close()
+	body, _ := json.Marshal(map[string]any{"enabled": true, "url": upstream.URL})
+	if w := request(t, a, "PUT", "/api/marketplace", string(body)); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	install := func() int {
+		b, _ := json.Marshal(map[string]any{"owner": owner, "id": p.ID, "version": p.Version, "sha256": digest})
+		return request(t, a, "POST", "/api/marketplace/install", string(b)).Code
+	}
+	if code := install(); code != 201 {
+		t.Fatal("first install", code)
+	}
+	p.Version = "1.0.1"
+	refresh()
+	if code := install(); code != 201 {
+		t.Fatal("publisher update", code)
+	}
+	p.Version = "1.0.2"
+	refresh()
+	if w := request(t, a, "GET", "/api/marketplace/updates", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"version":"1.0.2"`) {
+		t.Fatal("update not reported", w.Code, w.Body.String())
+	}
+	p.Version = "1.0.2"
+	owner = "DifferentPublisher"
+	refresh()
+	if code := install(); code != 409 {
+		t.Fatal("publisher substitution accepted", code)
+	}
+	m, err := a.module(p.ID)
+	if err != nil || m.Version != "1.0.1" {
+		t.Fatal("failed update changed active version")
+	}
+}
+
+func TestDisabledMarketplaceDoesNotCheckUpdates(t *testing.T) {
+	a, err := newTestApp(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := request(t, a, "GET", "/api/marketplace/updates", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"enabled":false`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
 func TestMarketplaceRequiresOwnerSession(t *testing.T) {
 	a, err := newTestApp(t, t.TempDir())
 	if err != nil {
@@ -45,6 +113,7 @@ func TestMarketplaceRequiresOwnerSession(t *testing.T) {
 		{"settings", "GET", "/api/marketplace"},
 		{"catalog", "GET", "/api/marketplace/catalog"},
 		{"versions", "GET", "/api/marketplace/versions"},
+		{"updates", "GET", "/api/marketplace/updates"},
 		{"configure", "PUT", "/api/marketplace"},
 		{"install", "POST", "/api/marketplace/install"},
 	} {

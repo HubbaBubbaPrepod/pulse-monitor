@@ -9,7 +9,7 @@ import { ModuleDataView } from './module-data-view';
 import { ConfigureExtension, ExtensionModuleView } from './module-extensions';
 import type { InstalledModule, ExtensionPackage } from '@/lib/module-extensions';
 import { useMonitor } from './provider';
-import { Marketplace } from './marketplace';
+import { Marketplace, ModuleUpdates } from './marketplace';
 import { PageHeading, PageMotion, Panel, Modal, Empty, Skeleton } from './ui';
 function ConfigureModule({ module, onClose }: { module: ModuleManifest; onClose: () => void }) {
   useLocale();
@@ -213,6 +213,7 @@ export function Modules() {
     [loading, setLoading] = useState(true),
     [configuring, setConfiguring] = useState<InstalledModule | null>(null),
     [confirm, setConfirm] = useState<InstalledModule | null>(null);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => {
     const abort = new AbortController();
     Promise.all([
@@ -237,6 +238,8 @@ export function Modules() {
     };
   }, [revision]);
   async function upload(file: File) {
+    if (uploading) return;
+    setUploading(true);
     try {
       if (file.size > 68 * 1024 * 1024) throw new Error(tr('Пакет модуля слишком большой'));
       const body = await file.text();
@@ -248,6 +251,8 @@ export function Modules() {
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : tr('Не удалось установить модуль'));
+    } finally {
+      setUploading(false);
     }
   }
   const [view, setView] = useState<'installed' | 'marketplace'>('installed');
@@ -260,10 +265,11 @@ export function Modules() {
         actions={
           <label className="button primary module-upload">
             <Upload size={16} />
-            {tr('Установить модуль')}
+            {tr(uploading ? 'Устанавливаем…' : 'Установить / обновить JSON')}
             <input
               type="file"
               accept=".json"
+              disabled={uploading}
               aria-label={tr('Установить модуль')}
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -274,6 +280,12 @@ export function Modules() {
           </label>
         }
       />
+      {uploading && (
+        <div className="module-install-status" role="status" aria-live="polite">
+          <span>{tr('Проверяем пакет и устанавливаем модуль. Не закрывайте страницу.')}</span>
+          <progress aria-label={tr('Установка модуля')} />
+        </div>
+      )}
       {!selected && (
         <div className="button-row module-tabs" role="group" aria-label={tr('Разделы модулей')}>
           <button
@@ -292,6 +304,7 @@ export function Modules() {
           </button>
         </div>
       )}
+      {view === 'installed' && !selected && <ModuleUpdates />}
       {view === 'marketplace' && !selected && <Marketplace installed={modules} />}
       {trText(
         error ? (

@@ -83,7 +83,7 @@ func (a *app) handler() http.Handler {
 			return
 		}
 		i := slices.IndexFunc(list, func(item server) bool { return item.ID == s.ID })
-		if i < 0 || list[i].Address != s.Address {
+		if i < 0 {
 			s.Source = "waiting"
 			s.OS = ""
 			s.Online = false
@@ -103,12 +103,6 @@ func (a *app) handler() http.Handler {
 		if err := validateServer(s); err != nil {
 			apiError(w, 400, err.Error())
 			return
-		}
-		if i >= 0 && list[i].Address != s.Address {
-			if err := a.resetAgent(s.ID, true); err != nil {
-				apiError(w, 500, "Could not reset agent")
-				return
-			}
 		}
 		if i < 0 {
 			if len(list) >= 50 {

@@ -2,6 +2,13 @@
 
 # Changelog
 
+## [0.6.0] — 2026-10-18
+
+- Update modules from the opt-in Marketplace or offline JSON import. Bind catalog updates to the selected publisher, preserve compatible v2 configuration and require renewed grants after contract changes. Retire legacy v1 manifests when importing their v2 replacement; retain old binaries and data.
+- Discover prerelease updates through an explicit preview toggle. Show install progress and published/installed versions.
+- Make node addresses optional metadata: agents use outbound HTTPS to Monitor and require no inbound node port or node certificate. Editing this metadata no longer revokes the agent token.
+- Fit the process summary to its card and align grouped/archive log rows.
+
 ## [0.5.0] — 2026-10-18
 
 - Preserve migration checksums across Git LF/CRLF checkouts and send only writable module configuration fields from the settings UI.

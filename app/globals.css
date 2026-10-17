@@ -3488,3 +3488,78 @@ body {
 .extension-component > .button-row:empty {
   display: none;
 }
+
+/* Overview uses a summary table; full process details remain on /processes/. */
+.bottom-grid {
+  align-items: start;
+}
+.process-preview .process-table {
+  table-layout: fixed;
+}
+.process-preview :is(th, td):is(:nth-child(2), :nth-child(6), :nth-child(7), :nth-child(8)),
+.process-preview .process-table:not(.has-gpu) :is(th, td):nth-child(5) {
+  display: none;
+}
+.process-preview :is(th, td):first-child {
+  width: 43%;
+}
+.process-preview .process-name {
+  min-width: 0;
+  max-width: 100%;
+}
+.process-preview .process-name span,
+.process-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.process-preview .process-name span {
+  min-width: 0;
+}
+.process-user {
+  max-width: 24ch;
+}
+.logs-panel .log-groups {
+  padding: 0 20px;
+}
+.logs-panel .log-groups > .log-feed {
+  padding: 0;
+  overflow: visible;
+}
+.logs-panel .log-line {
+  align-items: start;
+  min-height: 0;
+  height: auto;
+}
+.logs-panel .log-line > * {
+  min-width: 0;
+}
+.logs-panel .log-line time {
+  white-space: nowrap;
+}
+.logs-panel .log-source {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.logs-panel .log-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.logs-panel .log-group > .log-feed {
+  padding: 0 0 0 16px;
+}
+.module-install-status {
+  display: grid;
+  gap: 10px;
+  padding: 16px 0;
+}
+.module-install-status progress {
+  width: 100%;
+  accent-color: var(--text);
+}
+@media (max-width: 760px) {
+  .logs-panel .log-groups {
+    padding: 0 12px;
+  }
+}

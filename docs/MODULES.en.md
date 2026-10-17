@@ -2,6 +2,14 @@
 
 # Modules
 
+## Updating modules
+
+With Marketplace enabled, the installed-modules page checks publisher-bound updates while open (every five minutes) and offers an Update button. Preview releases require opting in. Every published version still needs moderation. Downloads are verified against the approved SHA-256. Installing JSON manually works with Marketplace disabled and makes no catalog requests.
+
+The same-ID JSON package installs its new version without removing the old module. Compatible v2 settings, secrets and grants are preserved. Changes to fields, triggers, runtime location or required capabilities disable the component until renewed consent; settings remain available. A v1 → v2 replacement retires the v1 manifest and retains its data and binaries; configure the v2 components separately. Native code executes with host-account permissions.
+
+Catalog installations store their origin and publisher. A manually imported module requires explicit publisher confirmation before its first catalog update; a different publisher cannot replace an existing catalog binding. Manual imports clear the binding for that new version.
+
 ## V2 runtime (unreleased)
 
 This branch supports native Agent and Monitor components with bounded interval and manual invocations. Existing v1 collectors remain supported. Published v0.4.0 binaries do not gain v2 support automatically: update both Monitor and Agent from compatible builds before using the interactive package.

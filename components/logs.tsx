@@ -21,7 +21,9 @@ function GroupedLogs({ entries }: { entries: LogEntry[] }) {
             <summary className={`log-line level-${group.entries[0].level.toLowerCase()}`}>
               <time className="mono">{logTime(group.entries[0].time)}</time>
               <span className="log-level">{group.entries[0].level}</span>
-              <span className="log-source mono">{group.entries[0].source || tr('Система')}</span>
+              <span className="log-source mono" title={group.entries[0].source}>
+                {group.entries[0].source || tr('Система')}
+              </span>
               <span className="log-message mono">
                 {group.summary === group.entries[0].message ? group.summary : tr(group.summary)}{' '}
                 <span className="tag">×{group.entries.length}</span>
@@ -53,7 +55,9 @@ export function LogFeed({ preview = false, entries }: { preview?: boolean; entri
               {trText(entry.level !== 'INFO' ? <TriangleAlert size={10} /> : null)}
               {trText(entry.level)}
             </span>
-            <span className="log-source mono">{entry.source || tr('Система')}</span>
+            <span className="log-source mono" title={entry.source}>
+              {entry.source || tr('Система')}
+            </span>
             <span className="log-message mono" title={entry.message}>
               {entry.message}
             </span>

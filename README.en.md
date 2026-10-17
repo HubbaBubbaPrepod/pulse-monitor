@@ -46,7 +46,7 @@ flowchart LR
    ./pulse-monitor -addr 0.0.0.0:8443 -data data -static out -tls-cert fullchain.pem -tls-key privkey.pem -public-url https://monitor.example.com:8443
    ```
 
-4. Open the HTTPS address, sign in, and add a node. Create a token in the saved node's settings. Save it on the node in a protected `agent.token` file without quotes. Linux: `chmod 600 agent.token`; Windows: restrict ACLs to the service account, SYSTEM, and administrators.
+4. Open the HTTPS address, sign in, and add a node. Only a name is required: its address is optional, and the node needs no certificate or inbound port. Create a token in the saved node's settings. Save it on the node in a protected `agent.token` file without quotes. Linux: `chmod 600 agent.token`; Windows: restrict ACLs to the service account, SYSTEM, and administrators.
 5. Download [Pulse Agent](https://github.com/HubbaBubbaPrepod/pulse-agent/releases) and start it:
 
    ```text

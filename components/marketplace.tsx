@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { Download, RefreshCw, ShieldCheck, Store } from 'lucide-react';
 import { api } from '@/lib/monitor';
 import type { ModuleManifest } from '@/lib/modules';
+import { newerModuleVersion } from '@/lib/module-version';
 import { useLocale, tr } from './locale';
 import { useMonitor } from './provider';
 import { Empty, Modal, Panel, Skeleton } from './ui';
 
 type Connection = { enabled: boolean; url: string };
-type PublishedModule = {
+export type PublishedModule = {
   owner: string;
   id: string;
   name: string;
@@ -37,6 +38,135 @@ function validModule(value: unknown): value is PublishedModule {
     item.platforms.every((p) => typeof p === 'string') &&
     Array.isArray(item.permissions) &&
     item.permissions.every((p) => typeof p === 'string')
+  );
+}
+
+export function ModuleUpdates() {
+  useLocale();
+  const { notify } = useMonitor();
+  const [installing, setInstalling] = useState('');
+  const [preview, setPreview] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [items, setItems] = useState<{ installed: string; module: PublishedModule }[]>([]);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  async function update(item: PublishedModule) {
+    if (installing) return;
+    setInstalling(item.id);
+    setError('');
+    try {
+      await api('/marketplace/install', {
+        method: 'POST',
+        body: JSON.stringify({
+          owner: item.owner,
+          id: item.id,
+          version: item.version,
+          sha256: item.sha256,
+        }),
+      });
+      setItems((current) => current.filter((entry) => entry.module.id !== item.id));
+      notify(tr('Модуль обновлён. Если изменились права, включите компонент в настройках.'));
+      window.dispatchEvent(new Event('pulse:modules'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tr('Не удалось установить модуль'));
+    } finally {
+      setInstalling('');
+    }
+  }
+  useEffect(() => {
+    const abort = new AbortController();
+    let inFlight = false;
+    const check = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await api<{
+          enabled: boolean;
+          items: { installed: string; module: PublishedModule }[];
+          unavailable?: string[];
+        }>(`/marketplace/updates?preview=${preview ? '1' : '0'}`, { signal: abort.signal });
+        if (
+          !Array.isArray(result.items) ||
+          !result.items.every(
+            (item) => typeof item.installed === 'string' && validModule(item.module),
+          )
+        )
+          throw new Error(tr('Некорректный ответ каталога'));
+        if (abort.signal.aborted) return;
+        setEnabled(result.enabled);
+        setItems(result.items);
+        setError(result.unavailable?.length ? tr('Часть обновлений проверить не удалось') : '');
+      } catch (e) {
+        if (!abort.signal.aborted)
+          setError(e instanceof Error ? e.message : tr('Каталог недоступен'));
+      } finally {
+        inFlight = false;
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void check();
+    }, 300_000);
+    const changed = () => setRevision((n) => n + 1);
+    window.addEventListener('pulse:modules', changed);
+    return () => {
+      abort.abort();
+      clearInterval(timer);
+      window.removeEventListener('pulse:modules', changed);
+    };
+  }, [preview, revision]);
+  if (!enabled && !error) return null;
+  return (
+    <Panel className="module-updates">
+      <div className="panel-title">
+        <h2>{tr('Обновления модулей')}</h2>
+        <button
+          className="button"
+          disabled={!!installing}
+          onClick={() => setRevision((n) => n + 1)}
+        >
+          {tr('Проверить обновления')}
+        </button>
+      </div>
+      <div className="module-info">
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={preview}
+            disabled={!!installing}
+            onChange={(e) => {
+              setItems([]);
+              setPreview(e.target.checked);
+            }}
+          />
+          {tr('Показывать предварительные версии')}
+        </label>
+        {installing && (
+          <div className="module-install-status" role="status" aria-live="polite">
+            <span>{tr('Скачивание, проверка и установка пакета…')}</span>
+            <progress aria-label={tr('Установка модуля')} />
+          </div>
+        )}
+        {error && <p role="alert">{error}</p>}
+        {!items.length && !error && (
+          <p className="muted">{tr('Обновлений в выбранном канале нет')}</p>
+        )}
+        {items.map((item) => (
+          <div className="button-row" key={`${item.module.owner}/${item.module.id}`}>
+            <span>
+              {item.module.name} · {item.installed} → {item.module.version}
+            </span>
+            <button
+              className="button primary"
+              disabled={!!installing}
+              onClick={() => void update(item.module)}
+            >
+              {tr(installing === item.module.id ? 'Устанавливаем…' : 'Обновить')}
+            </button>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -146,7 +276,7 @@ export function Marketplace({
       )
         throw new Error(tr('Некорректный ответ каталога'));
       setVersions(data.versions);
-      setChoice(data.versions[0]);
+      setChoice(data.versions.find((v) => v.version === item.version) ?? data.versions[0]);
       setAccepted(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : tr('Каталог недоступен'));
@@ -166,10 +296,13 @@ export function Marketplace({
           id: choice.id,
           version: choice.version,
           sha256: choice.sha256,
+          replace: installed.some((m) => m.id === choice.id),
         }),
       });
       window.dispatchEvent(new Event('pulse:modules'));
-      notify(tr('Модуль установлен'));
+      notify(
+        tr(installed.some((m) => m.id === choice.id) ? 'Модуль обновлён' : 'Модуль установлен'),
+      );
       setChoice(null);
       setVersions(null);
     } catch (e) {
@@ -301,6 +434,9 @@ export function Marketplace({
                     <div className="panel-title">
                       <h2>{item.name}</h2>
                       <span className="tag">{item.version}</span>
+                      {item.version.includes('-') && (
+                        <span className="tag">{tr('Предварительная версия')}</span>
+                      )}
                     </div>
                     <div className="module-info">
                       <small>
@@ -312,17 +448,24 @@ export function Marketplace({
                       </small>
                       <button
                         className="button"
-                        disabled={busy || !!existing}
+                        disabled={busy || existing?.version === item.version}
                         onClick={() => void inspect(item)}
                       >
                         <Download size={16} />
-                        {existing ? tr('Установлен') : tr('Версии и установка')}
+                        {existing
+                          ? existing.version === item.version
+                            ? tr('Установлен')
+                            : tr(
+                                newerModuleVersion(item.version, existing.version)
+                                  ? 'Доступно обновление'
+                                  : 'Другие версии',
+                              )
+                          : tr('Версии и установка')}
                       </button>
                       {existing && (
                         <small>
-                          {tr(
-                            'Уже установлен модуль с этим ID. Обновления доступны через ручной импорт JSON.',
-                          )}
+                          {tr('Установленная версия:')}
+                          {' ' + existing.version}
                         </small>
                       )}
                     </div>
@@ -359,6 +502,25 @@ export function Marketplace({
           }}
         >
           <div className="drawer-body marketplace-review">
+            {busy && (
+              <div className="module-install-status" role="status" aria-live="polite">
+                <span>{tr('Скачивание, проверка и установка пакета…')}</span>
+                <progress aria-label={tr('Установка модуля')} />
+              </div>
+            )}
+            {installed.some((m) => m.id === choice.id) && (
+              <p className="form-note">
+                {tr(
+                  'Обновление заменит установленную версию. Совместимые настройки сохранятся; изменение прав потребует повторного включения компонента. Издатель:',
+                )}
+                {' ' + choice.owner}
+              </p>
+            )}
+            {choice.version.includes('-') && (
+              <p className="form-note">
+                {tr('Предварительная версия: возможны ошибки и несовместимые изменения.')}
+              </p>
+            )}
             <label className="field">
               <span>{tr('Версия')}</span>
               <select
@@ -433,7 +595,13 @@ export function Marketplace({
               disabled={busy || !accepted}
               onClick={() => void install()}
             >
-              {tr(busy ? 'Устанавливаем…' : 'Установить')}
+              {tr(
+                busy
+                  ? 'Устанавливаем…'
+                  : installed.some((m) => m.id === choice.id)
+                    ? 'Обновить'
+                    : 'Установить',
+              )}
             </button>
           </div>
         </Modal>

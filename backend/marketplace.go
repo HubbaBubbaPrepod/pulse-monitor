@@ -208,6 +208,7 @@ func (a *app) marketplaceRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/marketplace/catalog", a.marketplaceCatalog)
 	mux.HandleFunc("GET /api/marketplace/versions", a.marketplaceCatalog)
+	mux.HandleFunc("GET /api/marketplace/updates", a.marketplaceUpdates)
 	mux.HandleFunc("POST /api/marketplace/install", a.marketplaceInstall)
 }
 
@@ -273,6 +274,7 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 		ID      string `json:"id"`
 		Version string `json:"version"`
 		SHA256  string `json:"sha256"`
+		Replace bool   `json:"replace"`
 	}
 	if err := decodeJSON(w, r, &input); err != nil {
 		apiError(w, 400, "Invalid installation request")
@@ -306,15 +308,6 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "Invalid package size")
 		return
 	}
-	// Installed IDs are global in protocol v1: do not let another publisher replace one.
-	if _, err := a.module(input.ID); !errors.Is(err, os.ErrNotExist) {
-		apiError(w, 409, "Module ID already installed; use manual import for updates")
-		return
-	}
-	if _, err := a.extension(input.ID); !errors.Is(err, os.ErrNotExist) {
-		apiError(w, 409, "Module ID already installed; use manual import for updates")
-		return
-	}
 	data, err := marketplaceFetch(r.Context(), origin, "/api/v1/packages/"+input.SHA256, metadata.Size)
 	if err != nil {
 		apiError(w, 502, "Package unavailable")
@@ -338,6 +331,7 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = io.NopCloser(bytes.NewReader(data))
 	r.ContentLength = int64(len(data))
+	r = r.WithContext(context.WithValue(r.Context(), moduleSourceKey{}, moduleInstallSource{Origin: origin.String(), Owner: metadata.Owner, Adopt: input.Replace}))
 	if manifest.SchemaVersion == 2 {
 		a.installExtensionPackage(w, r, origin.String())
 		return
