@@ -132,6 +132,29 @@ func TestModuleRejectsBinaryForDifferentPlatform(t *testing.T) {
 	}
 }
 
+func TestDeletedModuleRejectsChangedVersionBytes(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := collectorPackage(t)
+	if w := installTestModule(t, a, m); w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := request(t, a, "DELETE", "/api/modules/example", ""); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	for target, binary := range m.Binaries {
+		binary.Content = append(binary.Content, 1)
+		digest := sha256.Sum256(binary.Content)
+		binary.SHA256 = hex.EncodeToString(digest[:])
+		m.Binaries[target] = binary
+	}
+	if w := installTestModule(t, a, m); w.Code != 409 {
+		t.Fatal("replaced immutable binary", w.Code, w.Body.String())
+	}
+}
+
 func TestModulePackageRejectsUnsafePathsAndWrongHash(t *testing.T) {
 	for _, raw := range []string{`{"schemaVersion":1,"id":"../escape","version":"1.0.0"}`, `{"schemaVersion":1,"id":"test","version":"1.0.0","protocol":1,"name":"Test","binaries":{"linux-amd64":{"sha256":"bad","content":"aGVsbG8="}}}`} {
 		a, err := newApp(t.TempDir())
@@ -169,6 +192,15 @@ func TestModuleLifecycleSurvivesRestartAndRevokesDisabledCollector(t *testing.T)
 	if w := installTestModule(t, a, m); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	installed, err := a.module(m.ID)
+	if err != nil || installed.SchemaVersion != 1 || installed.Protocol != 1 || installed.Version != m.Version || len(installed.Fields) != 1 {
+		t.Fatal("v1 manifest changed", installed, err)
+	}
+	for target, binary := range m.Binaries {
+		if installed.Binaries[target].SHA256 != binary.SHA256 || len(installed.Binaries[target].Content) != 0 {
+			t.Fatal("stored v1 artifact metadata changed")
+		}
+	}
 	if w := request(t, a, "PUT", "/api/servers/production-01/modules/example", `{"enabled":true,"config":{"endpoint":"local-socket"}}`); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -190,6 +222,20 @@ func TestModuleLifecycleSurvivesRestartAndRevokesDisabledCollector(t *testing.T)
 	target := "?os=" + runtime.GOOS + "&arch=" + runtime.GOARCH
 	if w := agentRequest("GET", "/api/agent/production-01/modules"+target, ""); w.Code != 200 || !strings.Contains(w.Body.String(), "local-socket") {
 		t.Fatal(w.Code, w.Body.String())
+	} else {
+		var assignments []struct {
+			ID      string            `json:"id"`
+			Version string            `json:"version"`
+			SHA256  string            `json:"sha256"`
+			Config  map[string]string `json:"config"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &assignments); err != nil || len(assignments) != 1 {
+			t.Fatal("invalid v1 assignment", err)
+		}
+		v := assignments[0]
+		if v.ID != m.ID || v.Version != m.Version || v.SHA256 != m.Binaries[runtime.GOOS+"-"+runtime.GOARCH].SHA256 || v.Config["endpoint"] != "local-socket" {
+			t.Fatal("v1 assignment contract changed", v)
+		}
 	}
 	if w := agentRequest("GET", "/api/agent/windows-02/modules"+target, ""); w.Code != 401 {
 		t.Fatal("token accepted for another node", w.Code)
