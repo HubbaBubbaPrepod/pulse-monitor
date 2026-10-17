@@ -537,5 +537,9 @@
   "Каталог недоступен": "Catalog unavailable",
   "Разделы модулей": "Module sections",
   "Установленные": "Installed",
-  "Маркетплейс": "Marketplace"
+  "Маркетплейс": "Marketplace",
+  "Container ID": "Container ID",
+  "Скопировать ID": "Copy ID",
+  "ID скопирован": "ID copied",
+  "Не удалось скопировать ID": "Could not copy ID"
 }

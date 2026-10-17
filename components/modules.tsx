@@ -10,8 +10,8 @@ import {
   type ModuleAssignment,
   type ModuleResult,
   formatModuleValue,
-  moduleChartSeries,
 } from '@/lib/modules';
+import { ModuleChart } from './module-chart';
 import { useMonitor } from './provider';
 import { Marketplace } from './marketplace';
 import { PageHeading, PageMotion, Panel, Modal, Empty, Skeleton } from './ui';
@@ -209,7 +209,7 @@ function ConfigureModule({ module, onClose }: { module: ModuleManifest; onClose:
 }
 function ModuleView({ module }: { module: ModuleManifest }) {
   useLocale();
-  const { server, preferences, tick, paused } = useMonitor();
+  const { server, preferences, tick, paused, notify } = useMonitor();
   const serverId = server?.id;
   const liveTick = preferences.interval === 0 && !paused ? tick : 0;
   const [result, setResult] = useState<ModuleResult | null>(null),
@@ -303,10 +303,31 @@ function ModuleView({ module }: { module: ModuleManifest }) {
                             {trText(
                               view.columns.map((c) => (
                                 <td key={c.key}>
-                                  {formatModuleValue(
-                                    (row as Record<string, unknown>)?.[c.key],
-                                    c.unit,
-                                    currentLocale(),
+                                  {c.key === 'id' &&
+                                  typeof (row as Record<string, unknown>)?.[c.key] === 'string' ? (
+                                    <button
+                                      className="text-button mono"
+                                      title={String((row as Record<string, unknown>)[c.key])}
+                                      aria-label={tr('Скопировать ID')}
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(
+                                            String((row as Record<string, unknown>)[c.key]),
+                                          );
+                                          notify(tr('ID скопирован'));
+                                        } catch {
+                                          notify(tr('Не удалось скопировать ID'));
+                                        }
+                                      }}
+                                    >
+                                      {String((row as Record<string, unknown>)[c.key]).slice(0, 12)}
+                                    </button>
+                                  ) : (
+                                    formatModuleValue(
+                                      (row as Record<string, unknown>)?.[c.key],
+                                      c.unit,
+                                      currentLocale(),
+                                    )
                                   )}
                                 </td>
                               )),
@@ -361,28 +382,9 @@ function ModuleView({ module }: { module: ModuleManifest }) {
                 <span className="muted">{tr('Последние 60 измерений')}</span>
               </div>
               {trText(
-                view.columns.map((c) => {
-                  const series = moduleChartSeries(history, view.key, c.key);
-                  return (
-                    <div className="module-chart" key={c.key}>
-                      <span>
-                        {trText(c.label)} ·{' '}
-                        {formatModuleValue(series.latest, c.unit, currentLocale())}
-                      </span>
-                      <svg viewBox="0 0 600 140" role="img" aria-label={c.label}>
-                        {series.segments.map((points, i) => (
-                          <polyline
-                            key={i}
-                            points={points}
-                            fill="none"
-                            stroke="var(--chart-primary)"
-                            strokeWidth="2"
-                          />
-                        ))}
-                      </svg>
-                    </div>
-                  );
-                }),
+                view.columns.map((c) => (
+                  <ModuleChart key={c.key} history={history} dataKey={view.key} column={c} />
+                )),
               )}
             </Panel>
           );

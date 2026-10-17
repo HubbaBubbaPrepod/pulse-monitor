@@ -58,7 +58,7 @@ export function moduleChartSeries(
     points.push(`${(index * 600) / Math.max(1, values.length - 1)},${130 - (value / max) * 110}`);
   });
   if (points.length) segments.push(points.join(' '));
-  return { values, segments, latest: values.at(-1) ?? null };
+  return { values, segments, latest: values.at(-1) ?? null, max };
 }
 export function formatModuleValue(value: unknown, unit?: string, locale: Locale = 'en') {
   if (value === null || value === undefined) return '—';

@@ -3321,6 +3321,13 @@ body {
   font-size: 13px;
   color: var(--muted);
 }
+.module-resource-chart {
+  padding: 0 24px 20px;
+}
+.module-resource-chart + .module-resource-chart {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
 
 :root[data-reduced-motion='on'] *,
 :root[data-reduced-motion='on'] *::before,
