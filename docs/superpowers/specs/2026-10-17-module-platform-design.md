@@ -163,6 +163,55 @@ Cross-module wiring must not bypass permissions, create unbounded event loops or
 expose another module's configuration/secrets. Do not require the three acceptance
 modules to be implemented before the foundational contract is shipped.
 
+## Docker interactive acceptance requirements
+
+The existing Docker module is the first Agent-side interactive example. Its
+upgrade spans Monitor, Agent and the independently released Docker package.
+
+- Add a Container ID column to the container table. Show a short readable prefix,
+  expose/copy the full ID, and always send the full immutable ID in requests.
+  Never address a destructive operation by row index or mutable container name.
+- Use the existing Pulse chart presentation: theme variables, grid, timestamps,
+  hover/keyboard value inspection and unavailable-value gaps. CPU total uses
+  percent-of-one-core units and may exceed 100%; memory uses MiB on its own scale.
+  Do not show a fictitious historical range: current module history is limited
+  to measurements retained during the current view.
+- A container name/details button opens a container-specific log panel. Choosing
+  another container sends a read request for that container, not a persistent
+  edit of the module assignment or shared `logContainer` setting. Preserve the
+  legacy setting for existing v1 installations; it is no longer required for
+  interactive log viewing.
+- Log requests are bounded, return container identity and collection time, and
+  handle stopped/deleted containers, empty logs, unsupported logging drivers,
+  access errors and timeouts explicitly. Selecting a different server/container
+  cancels or ignores stale responses so logs cannot be mislabeled.
+- Expose start, restart and stop as separately declared, authorized manual
+  actions. Module installation alone does not grant container control. Operators
+  explicitly enable management for selected servers. Stop and restart require
+  a confirmation naming the exact container and server; all actions show pending,
+  success/failure and the resulting state, not optimistic unconditional success.
+- Requests travel browser -> authenticated Monitor API -> assigned Agent ->
+  module -> local Docker socket/pipe. Do not open Docker TCP access or put Docker
+  socket access into the browser/Monitor for remote hosts.
+- Validate action names, input schema, enabled assignment, grant, server,
+  component, installed version and full container ID at the relevant boundaries.
+  Do not add a Docker-specific command-execution endpoint to Pulse's core.
+- Persist an operation ID and audit entry before dispatch. Do not automatically
+  replay an uncertain start/restart/stop after a timeout, disconnect or host
+  restart. Report an unknown outcome and refresh observed container state;
+  read-only log requests may be retried explicitly. Server-side authorization
+  applies even when a client bypasses the visible buttons.
+- Avoid conflicting concurrent control operations on the same container. Disable
+  affected buttons while an operation is pending. Successful actions refresh the
+  container list without clearing another server's state or collecting every
+  container's logs on each telemetry cycle.
+- Validate Docker behavior against a fake Engine API including multiplexed and
+  plain TTY logs, HTTP 204/304/404/409/500 responses, cancellation, malformed IDs
+  and read-only assignments. Do not use a production container as a test target.
+- Test unchanged v1 Docker, an old Agent with a new Monitor, and unsupported
+  interactive capabilities. Hide/disable unavailable controls with a clear update
+  explanation rather than silently issuing unsupported commands.
+
 ## Delivery stages
 
 1. **v2 foundation:** manifest/schema, compatibility preflight, platform validation
