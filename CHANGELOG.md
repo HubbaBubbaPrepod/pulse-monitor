@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+- Add native v2 Agent/Monitor interval and manual components with explicit scoped grants,
+  private configuration/state, persistent operations and non-replaying uncertain outcomes.
+- Add generic component settings and table/standalone actions, selected-object logs,
+  container IDs and standard resource charts. Keep v1 assignments and data APIs intact.
+- Validate immutable metadata size/case portability and preserve password classification
+  across upgrades; recheck catalog opt-in/identity under the installation lock.
+
 - Add owner-authenticated v2 package preflight, a multi-component manifest schema
   and author templates. Validation does not install or execute packages; v1
   collectors remain compatible and unsupported v2 installation is explicit.

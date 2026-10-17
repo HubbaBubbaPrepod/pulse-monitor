@@ -7,27 +7,48 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "protocol", "id", "version", "name", "components"],
   "properties": {
-    "schemaVersion": { "const": 2 },
-    "protocol": { "const": 2 },
-    "id": { "$ref": "#/$defs/id" },
+    "schemaVersion": {
+      "const": 2
+    },
+    "protocol": {
+      "const": 2
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
     "version": {
       "type": "string",
       "maxLength": 48,
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9-]+)?$"
     },
-    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
-    "author": { "type": "string", "maxLength": 128 },
-    "description": { "type": "string", "maxLength": 2048 },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2048
+    },
     "permissions": {
       "type": "array",
       "maxItems": 16,
-      "items": { "type": "string", "maxLength": 512 }
+      "items": {
+        "type": "string",
+        "maxLength": 512
+      }
     },
     "components": {
       "type": "array",
       "minItems": 1,
       "maxItems": 16,
-      "items": { "$ref": "#/$defs/component" }
+      "items": {
+        "$ref": "#/$defs/component"
+      }
     }
   },
   "$defs": {
@@ -52,28 +73,88 @@
       "additionalProperties": false,
       "required": ["key", "type"],
       "properties": {
-        "key": { "$ref": "#/$defs/id" },
-        "label": { "type": "string", "maxLength": 128 },
-        "type": { "enum": ["text", "password", "number", "boolean"] },
-        "required": { "type": "boolean" },
-        "default": { "type": ["string", "number", "boolean", "null"] }
+        "key": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "type": {
+          "enum": ["text", "password", "number", "boolean"]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {
+          "type": ["string", "number", "boolean", "null"]
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "type": { "const": "text" } } },
-          "then": { "properties": { "default": { "type": ["string", "null"], "maxLength": 4096 } } }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": ["string", "null"],
+                "maxLength": 4096
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "type": { "const": "password" } } },
-          "then": { "properties": { "default": { "enum": ["", null] } } }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "password"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "enum": ["", null]
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "type": { "const": "number" } } },
-          "then": { "properties": { "default": { "type": ["number", "null"] } } }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": ["number", "null"]
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "type": { "const": "boolean" } } },
-          "then": { "properties": { "default": { "type": ["boolean", "null"] } } }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "boolean"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": ["boolean", "null"]
+              }
+            }
+          }
         }
       ]
     },
@@ -82,8 +163,15 @@
       "additionalProperties": false,
       "required": ["sha256", "content"],
       "properties": {
-        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
-        "content": { "type": "string", "minLength": 1, "contentEncoding": "base64" }
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "contentEncoding": "base64"
+        }
       }
     },
     "trigger": {
@@ -93,8 +181,14 @@
           "additionalProperties": false,
           "required": ["type", "seconds"],
           "properties": {
-            "type": { "const": "interval" },
-            "seconds": { "type": "integer", "minimum": 5, "maximum": 86400 }
+            "type": {
+              "const": "interval"
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 86400
+            }
           }
         },
         {
@@ -102,15 +196,80 @@
           "additionalProperties": false,
           "required": ["type", "events"],
           "properties": {
-            "type": { "const": "event" },
-            "events": { "allOf": [{ "$ref": "#/$defs/names" }], "minItems": 1 }
+            "type": {
+              "const": "event"
+            },
+            "events": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/names"
+                }
+              ],
+              "minItems": 1
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["type", "action"],
-          "properties": { "type": { "const": "manual" }, "action": { "$ref": "#/$defs/id" } }
+          "properties": {
+            "type": {
+              "const": "manual"
+            },
+            "action": {
+              "$ref": "#/$defs/id"
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "mutating": {
+              "type": "boolean"
+            },
+            "inputFields": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/field"
+                  },
+                  {
+                    "not": {
+                      "required": ["default"]
+                    }
+                  }
+                ]
+              }
+            },
+            "inputKey": {
+              "$ref": "#/$defs/id"
+            },
+            "resultView": {
+              "enum": ["", "logs", "cards", "table"]
+            },
+            "when": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "values"],
+              "properties": {
+                "key": {
+                  "$ref": "#/$defs/id"
+                },
+                "values": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -119,16 +278,32 @@
       "additionalProperties": false,
       "required": ["id", "location", "protocol", "triggers", "binaries"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "location": { "enum": ["agent", "monitor"] },
-        "protocol": { "const": 2 },
-        "requires": { "$ref": "#/$defs/names" },
-        "fields": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/field" } },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "location": {
+          "enum": ["agent", "monitor"]
+        },
+        "protocol": {
+          "const": 2
+        },
+        "requires": {
+          "$ref": "#/$defs/names"
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
         "triggers": {
           "type": "array",
           "minItems": 1,
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/trigger" }
+          "items": {
+            "$ref": "#/$defs/trigger"
+          }
         },
         "binaries": {
           "type": "object",
@@ -136,26 +311,101 @@
           "maxProperties": 3,
           "additionalProperties": false,
           "properties": {
-            "linux-amd64": { "$ref": "#/$defs/binary" },
-            "linux-arm64": { "$ref": "#/$defs/binary" },
-            "windows-amd64": { "$ref": "#/$defs/binary" }
+            "linux-amd64": {
+              "$ref": "#/$defs/binary"
+            },
+            "linux-arm64": {
+              "$ref": "#/$defs/binary"
+            },
+            "windows-amd64": {
+              "$ref": "#/$defs/binary"
+            }
+          }
+        },
+        "views": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/view"
           }
         }
       },
       "allOf": [
         {
-          "if": { "properties": { "location": { "const": "agent" } } },
+          "if": {
+            "properties": {
+              "location": {
+                "const": "agent"
+              }
+            }
+          },
           "then": {
             "properties": {
               "triggers": {
                 "items": {
-                  "not": { "properties": { "type": { "const": "event" } }, "required": ["type"] }
+                  "not": {
+                    "properties": {
+                      "type": {
+                        "const": "event"
+                      }
+                    },
+                    "required": ["type"]
+                  }
                 }
               }
             }
           }
         }
       ]
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "key"],
+      "properties": {
+        "kind": {
+          "enum": ["table", "cards", "chart", "logs"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "key": {
+          "$ref": "#/$defs/id"
+        },
+        "columns": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key"],
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/id"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "unit": {
+                "type": "string",
+                "maxLength": 32
+              }
+            }
+          }
+        },
+        "rowKey": {
+          "$ref": "#/$defs/id"
+        },
+        "actions": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
     }
   }
 }

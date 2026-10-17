@@ -40,7 +40,11 @@ function validModule(value: unknown): value is PublishedModule {
   );
 }
 
-export function Marketplace({ installed }: { installed: ModuleManifest[] }) {
+export function Marketplace({
+  installed,
+}: {
+  installed: Pick<ModuleManifest, 'id' | 'version'>[];
+}) {
   useLocale();
   const { notify } = useMonitor();
   const [connection, setConnection] = useState<Connection | null>(null);

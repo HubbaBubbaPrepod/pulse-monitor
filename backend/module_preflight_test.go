@@ -53,7 +53,7 @@ func TestModuleCapabilitiesRequiresOwnerSession(t *testing.T) {
 		Installable    []int    `json:"installableSchemaVersions"`
 		Runtimes       []string `json:"runtimes"`
 	}
-	if json.Unmarshal(w.Body.Bytes(), &capabilities) != nil || !reflect.DeepEqual(capabilities.SchemaVersions, []int{1, 2}) || !reflect.DeepEqual(capabilities.Installable, []int{1}) || capabilities.Runtimes == nil || len(capabilities.Runtimes) != 0 {
+	if json.Unmarshal(w.Body.Bytes(), &capabilities) != nil || !reflect.DeepEqual(capabilities.SchemaVersions, []int{1, 2}) || !reflect.DeepEqual(capabilities.Installable, []int{1, 2}) || capabilities.Runtimes == nil || len(capabilities.Runtimes) != 2 {
 		t.Fatal(w.Body.String())
 	}
 }
@@ -77,7 +77,7 @@ func TestModulePreflightIsReadOnlyAndRedacted(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Valid || result.Compatible || len(result.Issues) != 0 || len(result.CompatibilityIssues) == 0 {
+	if !result.Valid || !result.Compatible || len(result.Issues) != 0 || len(result.CompatibilityIssues) != 0 {
 		t.Fatal(w.Body.String())
 	}
 	for _, sensitive := range []string{"content", "sha256", "Example extension", "state.read"} {

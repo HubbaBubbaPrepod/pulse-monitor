@@ -125,3 +125,56 @@ func TestInstallReleasedDockerModule(t *testing.T) {
 		t.Fatalf("Reinstall should preserve immutable versions: status %d", response.Code)
 	}
 }
+func TestInstallInteractiveDockerModule(t *testing.T) {
+	if *releasedModulePath == "" {
+		t.Skip("Pass -module-package, -module-sha256 and -module-version")
+	}
+	raw, err := os.ReadFile(*releasedModulePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(raw)
+	if hex.EncodeToString(digest[:]) != *releasedModuleSHA {
+		t.Fatal("Package digest mismatch")
+	}
+	p, err := decodeModulePackageV2(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != "docker" || p.Version != *releasedModuleVersion || len(p.Components) != 1 || len(p.Components[0].Binaries) != 3 {
+		t.Fatal("Interactive package identity mismatch")
+	}
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, a, "POST", "/api/extensions", string(raw))
+	if response.Code != 201 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	for target, binary := range p.Components[0].Binaries {
+		data, err := os.ReadFile(filepath.Join(a.dir, "extensions", p.ID, p.Version, p.Components[0].ID, moduleArtifactFilename(target)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		if hex.EncodeToString(sum[:]) != binary.SHA256 {
+			t.Fatal("Installed digest mismatch", target)
+		}
+	}
+	cfg, err := a.extensionConfiguration(p.ID, p.Components[0].ID, "production-01")
+	if err != nil || cfg.Enabled || len(cfg.Grants) > 0 {
+		t.Fatal("Upload enabled native code without consent", cfg, err)
+	}
+	for _, action := range []string{"logs", "start", "restart", "stop"} {
+		trigger, ok := manualModuleTrigger(p.Components[0], action)
+		if !ok || trigger.InputKey != "containerId" || trigger.Mutating != (action != "logs") {
+			t.Fatal("Missing action contract", action)
+		}
+	}
+	p.Components[0].Views[0].Title = "Changed immutable view"
+	changed, _ := json.Marshal(p)
+	if w := request(t, a, "POST", "/api/extensions", string(changed)); w.Code != 409 {
+		t.Fatal("Immutable metadata was replaced", w.Code, w.Body.String())
+	}
+}

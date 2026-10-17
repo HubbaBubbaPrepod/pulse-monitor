@@ -537,6 +537,10 @@ func (a *app) installModulePackage(w http.ResponseWriter, r *http.Request, marke
 	normalizeModule(&m)
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
+	if err := a.checkModuleIdentityCase(m.ID); err != nil {
+		apiError(w, 409, "Module identity conflicts with an existing directory")
+		return
+	}
 	if marketplace != "" {
 		config, err := a.marketplaceConfiguration()
 		if err != nil || !config.Enabled || config.URL != marketplace {

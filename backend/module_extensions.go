@@ -12,11 +12,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
-var moduleHostCapabilities = []string{"state.read", "state.write", "events.receive", "network.outbound", "actions.execute"}
+var moduleHostCapabilities = []string{"state.read", "state.write", "network.outbound", "actions.execute"}
 
 type moduleConfiguration struct {
+	SecretKeys   []string       `json:"secretKeys,omitempty"`
 	Enabled      bool           `json:"enabled"`
 	Version      string         `json:"version"`
 	Config       map[string]any `json:"config"`
@@ -45,6 +47,12 @@ func readModuleJSON(path string, into any) error {
 	}
 	return json.Unmarshal(raw, into)
 }
+func moduleArtifactFilename(platform string) string {
+	if strings.HasPrefix(platform, "windows-") {
+		return platform + ".exe"
+	}
+	return platform
+}
 func (a *app) extension(id string) (modulePackageV2, error) {
 	var p modulePackageV2
 	if !validID.MatchString(id) {
@@ -72,12 +80,15 @@ func manualModuleTrigger(c moduleComponentV2, action string) (moduleTriggerV2, b
 	}
 	return moduleTriggerV2{}, false
 }
-func (a *app) configurationPath(module, component, server string) string {
-	scope := "monitor"
-	if server != "" {
-		scope = "server-" + server
+func moduleScopeKey(server string) string {
+	if server == "" {
+		return "monitor"
 	}
-	return filepath.Join(a.dir, "extension-config", module, component, scope+".json")
+	digest := sha256.Sum256([]byte(server))
+	return "server-" + hex.EncodeToString(digest[:])
+}
+func (a *app) configurationPath(module, component, server string) string {
+	return filepath.Join(a.dir, "extension-config", module, component, moduleScopeKey(server)+".json")
 }
 
 func (a *app) revokeExtensionConfigurations(p modulePackageV2) error {
@@ -120,6 +131,26 @@ func (a *app) extensionConfiguration(module, component, server string) (moduleCo
 	if c.Grants == nil {
 		c.Grants = []string{}
 	}
+	// Recover secret classification from immutable version metadata for older records.
+	if err == nil && c.SecretKeys == nil && moduleVersion.MatchString(c.Version) {
+		var previous modulePackageV2
+		if e := readModuleJSON(filepath.Join(a.dir, "extensions", module, c.Version, "manifest.json"), &previous); e != nil {
+			return c, e
+		}
+		if previous.ID != module {
+			return c, errors.New("Configuration identity mismatch")
+		}
+		for _, oldComponent := range previous.Components {
+			if strings.EqualFold(oldComponent.ID, component) {
+				for _, field := range oldComponent.Fields {
+					if field.Type == "password" {
+						c.SecretKeys = append(c.SecretKeys, field.Key)
+					}
+				}
+				break
+			}
+		}
+	}
 	return c, err
 }
 func validModuleScope(a *app, c moduleComponentV2, server string) bool {
@@ -134,21 +165,57 @@ func validModuleScope(a *app, c moduleComponentV2, server string) bool {
 }
 func publicModuleConfiguration(c moduleConfiguration, fields []moduleField) map[string]any {
 	config := map[string]any{}
-	for key, value := range c.Config {
-		config[key] = value
-	}
 	secrets := []string{}
-	for _, f := range fields {
-		if f.Type == "password" {
-			if v, ok := config[f.Key].(string); ok && v != "" {
-				secrets = append(secrets, f.Key)
-			}
-			delete(config, f.Key)
+	for _, field := range fields {
+		value, exists := c.Config[field.Key]
+		if !exists {
+			continue
 		}
+		if field.Type == "password" || slices.Contains(c.SecretKeys, field.Key) {
+			if text, ok := value.(string); ok && text != "" {
+				secrets = append(secrets, field.Key)
+			}
+			continue
+		}
+		config[field.Key] = value
 	}
 	return map[string]any{"enabled": c.Enabled, "version": c.Version, "config": config, "grants": c.Grants, "secrets": secrets}
 }
+
+// Canonical identities must be portable across case-insensitive filesystems.
+func (a *app) checkModuleIdentityCase(id string) error {
+	for _, root := range []string{a.moduleRoot(), filepath.Join(a.dir, "extensions")} {
+		dirs, err := os.ReadDir(root)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		for _, dir := range dirs {
+			if dir.IsDir() && strings.EqualFold(dir.Name(), id) && dir.Name() != id {
+				return errors.New("Module ID differs only by case from an existing identity")
+			}
+		}
+	}
+	return nil
+}
 func (a *app) installExtension(w http.ResponseWriter, r *http.Request) {
+	a.installExtensionPackage(w, r, "")
+}
+func (a *app) installExtensionPackage(w http.ResponseWriter, r *http.Request, marketplace string) {
+	controller := http.NewResponseController(w)
+	deadline := time.Now().Add(2 * time.Minute)
+	for _, err := range []error{controller.SetReadDeadline(deadline), controller.SetWriteDeadline(deadline)} {
+		if err != nil && !errors.Is(err, http.ErrNotSupported) {
+			apiError(w, 500, "Upload deadline unavailable")
+			return
+		}
+	}
+	if r.ContentLength > modulePackageBodyLimit {
+		apiError(w, 413, "Extension upload exceeds limit")
+		return
+	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, modulePackageBodyLimit))
 	if err != nil {
 		apiError(w, 400, "Invalid extension upload")
@@ -163,6 +230,21 @@ func (a *app) installExtension(w http.ResponseWriter, r *http.Request) {
 	defer a.extensionMu.Unlock()
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
+	if err := a.checkModuleIdentityCase(p.ID); err != nil {
+		apiError(w, 409, "Module identity conflicts with an existing directory")
+		return
+	}
+	if marketplace != "" {
+		config, err := a.marketplaceConfiguration()
+		if err != nil || !config.Enabled || config.URL != marketplace {
+			apiError(w, 409, "Marketplace settings changed")
+			return
+		}
+		if _, err := a.extension(p.ID); !errors.Is(err, os.ErrNotExist) {
+			apiError(w, 409, "Module ID already installed")
+			return
+		}
+	}
 	if _, err := a.module(p.ID); !errors.Is(err, os.ErrNotExist) {
 		apiError(w, 409, "Remove the legacy module before installing its v2 replacement; saved data remains")
 		return
@@ -186,7 +268,7 @@ func (a *app) installExtension(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for target, b := range c.Binaries {
-			if os.WriteFile(filepath.Join(dir, target), b.Content, 0600) != nil {
+			if os.WriteFile(filepath.Join(dir, moduleArtifactFilename(target)), b.Content, 0600) != nil {
 				apiError(w, 500, "Could not stage artifact")
 				return
 			}
@@ -213,7 +295,7 @@ func (a *app) installExtension(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, c := range p.Components {
 			for target, b := range c.Binaries {
-				data, err := os.ReadFile(filepath.Join(version, c.ID, target))
+				data, err := os.ReadFile(filepath.Join(version, c.ID, moduleArtifactFilename(target)))
 				sum := sha256.Sum256(data)
 				if err != nil || !strings.EqualFold(hex.EncodeToString(sum[:]), b.SHA256) {
 					apiError(w, 409, "Existing extension artifact differs")
@@ -238,6 +320,7 @@ func (a *app) installExtension(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) extensionRoutes(mux *http.ServeMux) {
+	a.componentSnapshotRoutes(mux)
 	mux.HandleFunc("POST /api/extensions", a.installExtension)
 	mux.HandleFunc("GET /api/extensions", func(w http.ResponseWriter, r *http.Request) {
 		a.extensionMu.Lock()
@@ -341,11 +424,23 @@ func (a *app) extensionRoutes(mux *http.ServeMux) {
 				return
 			}
 			if next.Enabled {
+				for _, t := range c.Triggers {
+					if t.Type == "event" {
+						apiError(w, 403, "Event dispatch is not supported by this runtime yet")
+						return
+					}
+				}
 				for _, required := range c.Requires {
 					if !slices.Contains(next.Grants, required) || !slices.Contains(moduleHostCapabilities, required) {
 						apiError(w, 403, "Required capability is not granted or supported")
 						return
 					}
+				}
+			}
+			next.SecretKeys = nil
+			for _, field := range c.Fields {
+				if field.Type == "password" {
+					next.SecretKeys = append(next.SecretKeys, field.Key)
 				}
 			}
 			next.Version = p.Version

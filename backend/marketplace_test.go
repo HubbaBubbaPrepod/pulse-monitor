@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestMarketplaceFetchRejectsRedirects(t *testing.T) {
@@ -188,6 +189,77 @@ func TestMarketplaceRejectsUnsafeSources(t *testing.T) {
 			body, _ := json.Marshal(map[string]any{"enabled": true, "url": tc.url})
 			if w := request(t, a, "PUT", "/api/marketplace", string(body)); w.Code != 400 {
 				t.Fatalf("unsafe source accepted: %d", w.Code)
+			}
+		})
+	}
+}
+
+type extensionInstallBarrier struct {
+	*httptest.ResponseRecorder
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *extensionInstallBarrier) SetReadDeadline(time.Time) error {
+	close(w.entered)
+	<-w.release
+	return nil
+}
+func TestMarketplaceV2RechecksPolicyAtInstallationBoundary(t *testing.T) {
+	for _, mode := range []string{"disabled", "identity"} {
+		t.Run(mode, func(t *testing.T) {
+			a, err := newTestApp(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw := extensionFixturePackage(t, "monitor")
+			sum := sha256.Sum256(raw)
+			digest := hex.EncodeToString(sum[:])
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasPrefix(r.URL.Path, "/api/v1/packages/") {
+					w.Write(raw)
+					return
+				}
+				writeJSON(w, 200, map[string]any{"owner": "Publisher", "id": "example", "version": "2.0.0", "sha256": digest, "size": len(raw)})
+			}))
+			defer upstream.Close()
+			config, _ := json.Marshal(marketplaceConfig{Enabled: true, URL: upstream.URL})
+			if w := request(t, a, "PUT", "/api/marketplace", string(config)); w.Code != 200 {
+				t.Fatal(w.Code)
+			}
+			input, _ := json.Marshal(map[string]string{"owner": "Publisher", "id": "example", "version": "2.0.0", "sha256": digest})
+			w := &extensionInstallBarrier{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), release: make(chan struct{})}
+			r := httptest.NewRequest("POST", "/api/marketplace/install", strings.NewReader(string(input)))
+			r.Host = "127.0.0.1:8080"
+			done := make(chan struct{})
+			go func() { defer close(done); a.marketplaceInstall(w, r) }()
+			select {
+			case <-w.entered:
+			case <-time.After(5 * time.Second):
+				close(w.release)
+				t.Fatal("installer boundary not reached")
+			}
+			if mode == "disabled" {
+				if response := request(t, a, "PUT", "/api/marketplace", `{"enabled":false,"url":"`+upstream.URL+`"}`); response.Code != 200 {
+					t.Error(response.Code)
+				}
+			} else {
+				var p map[string]any
+				json.Unmarshal(raw, &p)
+				p["version"] = "2.0.1"
+				newer, _ := json.Marshal(p)
+				if response := request(t, a, "POST", "/api/extensions", string(newer)); response.Code != 201 {
+					t.Error(response.Code, response.Body.String())
+				}
+			}
+			close(w.release)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("installer blocked")
+			}
+			if w.Code != 409 {
+				t.Fatal("catalog policy changed during transfer but install continued", mode, w.Code)
 			}
 		})
 	}

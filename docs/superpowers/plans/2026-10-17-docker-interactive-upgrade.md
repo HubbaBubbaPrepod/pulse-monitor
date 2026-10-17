@@ -11,7 +11,7 @@ requests and Agent executes the assigned component locally. Retain read-only
 Docker v1 behavior for existing users.
 
 **Tech Stack:** Existing Go standard library, Next.js/React/TypeScript UI, Docker
-Engine HTTP API over existing Unix socket/Windows pipe transports. No new dependencies.
+Engine HTTP API over existing Unix socket/Windows pipe transports. Windows named pipe transport uses the explicitly approved Microsoft/go-winio v0.6.2 dependency.
 
 **Spec:** `../specs/2026-10-17-module-platform-design.md`, especially Docker
 interactive acceptance requirements.
@@ -198,3 +198,19 @@ Review with the v2 foundation plan. Recommended execution is native in this
 session with tests at each boundary. Stage 1 identity/chart improvements may be
 implemented first; interactive controls require the generic runtime and must not
 be presented as working until end-to-end verification passes.
+
+## Local verification record (2026-10-17)
+
+Implementation is available in the development branches, not yet a public release.
+Monitor Go tests/vet and frontend lint/production build passed. Agent tests/vet
+passed. Docker tests/vet, Windows real named pipe HTTP/cancellation tests and
+three-platform builds passed. Fresh v1 and v2 JSON installation integration tests
+passed. Marketplace API/web tests and lint passed. A disposable local Docker
+container verified selected-target logs, denied control, stop/start/restart; it
+was removed. No production container action was performed.
+
+An isolated native UI fixture verified separate selected-target logs, plain-text
+rendering, observed-state controls, confirmation, standard charts, Full HD and
+390px mobile layouts and both themes. Linux race tests remain a CI check; no
+local Linux race result is claimed. Release integration and public artifacts
+remain pending; events/alerts/Telegram/custom HTML are subsequent stages.

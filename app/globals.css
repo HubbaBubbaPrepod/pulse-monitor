@@ -3428,3 +3428,63 @@ body {
     flex-wrap: wrap;
   }
 }
+.extension-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.extension-grant,
+.extension-secret-clear {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+}
+.extension-secret-clear {
+  font-size: 12px;
+  color: var(--muted);
+}
+.extension-row-actions {
+  flex-wrap: nowrap;
+}
+.extension-row-actions .button {
+  padding: 7px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.extension-target {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-bottom: 24px;
+}
+.module-log-feed pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: inherit;
+  line-height: 1.6;
+  margin: 0;
+  padding: 6px 0;
+}
+.extension-result {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.module-views td .text-button {
+  font-size: inherit;
+  text-align: left;
+}
+
+.app-shell .extension-component > .panel-title {
+  padding: 0 0 12px;
+}
+.extension-component > .module-views {
+  margin: 0;
+}
+.extension-component > .module-views > .muted {
+  margin: 0;
+}
+.extension-component > .button-row:empty {
+  display: none;
+}

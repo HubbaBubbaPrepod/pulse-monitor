@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func installExtensionFixture(t *testing.T, a *app, location string) {
+func extensionFixturePackage(t *testing.T, location string) []byte {
 	t.Helper()
 	var value map[string]any
 	json.Unmarshal(v2PackageJSON(t, location), &value)
@@ -18,6 +18,11 @@ func installExtensionFixture(t *testing.T, a *app, location string) {
 	c["triggers"] = []any{map[string]any{"type": "manual", "action": "inspect", "label": "Inspect", "mutating": false, "inputFields": []any{map[string]any{"key": "containerId", "label": "ID", "type": "text", "required": true}}}, map[string]any{"type": "manual", "action": "stop", "label": "Stop", "mutating": true, "inputFields": []any{map[string]any{"key": "containerId", "label": "ID", "type": "text", "required": true}}}}
 	c["views"] = []any{map[string]any{"kind": "table", "key": "containers", "title": "Containers", "columns": []any{}, "rowKey": "id", "actions": []string{"inspect", "stop"}}}
 	raw, _ := json.Marshal(value)
+	return raw
+}
+func installExtensionFixture(t *testing.T, a *app, location string) {
+	t.Helper()
+	raw := extensionFixturePackage(t, location)
 	w := request(t, a, "POST", "/api/extensions", string(raw))
 	if w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
@@ -153,5 +158,115 @@ func TestModuleExtensionConfigurationChangeRevokesQueuedOperations(t *testing.T)
 	w = request(t, a, "GET", "/api/module-operations/"+op.ID, "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"cancelled"`) {
 		t.Fatal("old confirmation was rebound to new configuration", w.Code, w.Body.String())
+	}
+}
+func TestModuleExtensionAgentSerializesClaimsAndPersistsTarget(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	installExtensionFixture(t, a, "agent")
+	token, err := a.issueAgentToken("production-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.telemetryMu.Lock()
+	a.nodes["production-01"].Seen = time.Now()
+	a.nodes["production-01"].Report.Capabilities = map[string]string{"moduleRuntime": "2"}
+	a.telemetryMu.Unlock()
+	if w := request(t, a, "PUT", "/api/extensions/example/components/a/configuration?server=production-01", `{"enabled":true,"grants":["state.read"],"config":{"token":"secret-token"}}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	for _, target := range []string{"first-target", "second-target"} {
+		w := request(t, a, "POST", "/api/extensions/example/components/a/operations?server=production-01", `{"action":"inspect","input":{"containerId":"`+target+`"}}`)
+		if w.Code != 202 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	claim := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/api/agent/production-01/module-operations?os="+runtime.GOOS+"&arch="+runtime.GOARCH, nil)
+		r.Host = "127.0.0.1:8080"
+		r.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		a.handler().ServeHTTP(w, r)
+		return w
+	}
+	first := claim()
+	var leases []moduleLease
+	if first.Code != 200 || json.Unmarshal(first.Body.Bytes(), &leases) != nil || len(leases) != 1 {
+		t.Fatal(first.Code, first.Body.String())
+	}
+	second := claim()
+	if second.Code != 200 || strings.TrimSpace(second.Body.String()) != "[]" {
+		t.Fatal("parallel Agent claims can race component state", second.Code, second.Body.String())
+	}
+	a.extensionMu.Lock()
+	op, err := a.moduleOperation(leases[0].ID)
+	if err == nil {
+		err = a.finishModuleOperation(op, moduleInvocationResult{Protocol: 2, Status: "ok", Data: json.RawMessage(`{"actual":true}`)}, nil)
+	}
+	a.extensionMu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err = a.moduleOperation(leases[0].ID)
+	if err != nil || op.StartedAt.IsZero() || op.Target["containerId"] != "first-target" || op.Input != nil || op.Secrets != nil {
+		t.Fatal("operation audit lost target or retained private inputs", op, err)
+	}
+	if w := claim(); w.Code != 200 || !strings.Contains(w.Body.String(), "second-target") {
+		t.Fatal("next operation was not dispatched", w.Code, w.Body.String())
+	}
+}
+func TestModuleExtensionUpgradeCannotExposeFormerPasswordField(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	installExtensionFixture(t, a, "monitor")
+	path := "/api/extensions/example/components/a/configuration"
+	if w := request(t, a, "PUT", path, `{"enabled":true,"grants":["state.read"],"config":{"token":"private-upgrade-secret"}}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var p map[string]any
+	json.Unmarshal(extensionFixturePackage(t, "monitor"), &p)
+	p["version"] = "2.0.1"
+	c := p["components"].([]any)[0].(map[string]any)
+	c["fields"].([]any)[0].(map[string]any)["type"] = "text"
+	raw, _ := json.Marshal(p)
+	if w := request(t, a, "POST", "/api/extensions", string(raw)); w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w := request(t, a, "GET", path, "")
+	if w.Code != 200 || strings.Contains(w.Body.String(), "private-upgrade-secret") {
+		t.Fatal("upgrade exposed password as text", w.Code)
+	}
+}
+func TestModuleExtensionRejectsCaseAliasPackageID(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	installExtensionFixture(t, a, "monitor")
+	var p map[string]any
+	json.Unmarshal(extensionFixturePackage(t, "monitor"), &p)
+	p["id"] = "Example"
+	p["version"] = "2.0.1"
+	raw, _ := json.Marshal(p)
+	if w := request(t, a, "POST", "/api/extensions", string(raw)); w.Code != 409 {
+		t.Fatal("case alias accepted", w.Code)
+	}
+}
+func TestModuleScopePathsPreserveServerCaseIdentity(t *testing.T) {
+	a, err := newTestApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := moduleOperation{ModuleID: "example", ComponentID: "engine", ServerID: "NodeA"}
+	second := first
+	second.ServerID = "nodea"
+	for name, paths := range map[string][2]string{"configuration": {a.configurationPath("example", "engine", "NodeA"), a.configurationPath("example", "engine", "nodea")}, "state": {a.componentStatePath(first), a.componentStatePath(second)}, "snapshot": {a.componentSnapshotPath("example", "engine", "NodeA"), a.componentSnapshotPath("example", "engine", "nodea")}} {
+		if strings.EqualFold(paths[0], paths[1]) {
+			t.Fatal("server scopes collide on Windows", name)
+		}
 	}
 }

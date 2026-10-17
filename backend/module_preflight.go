@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
+	"slices"
 	"time"
 )
 
@@ -12,7 +14,7 @@ const modulePackageBodyLimit = 68 * 1024 * 1024
 
 func (a *app) modulePreflightRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/module-capabilities", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"schemaVersions": []int{1, 2}, "installableSchemaVersions": []int{1}, "runtimes": []string{}})
+		writeJSON(w, 200, map[string]any{"schemaVersions": []int{1, 2}, "installableSchemaVersions": []int{1, 2}, "runtimes": []string{"agent.process.v2", "monitor.process.v2"}, "triggers": []string{"manual", "interval"}})
 	})
 	mux.HandleFunc("POST /api/module-packages/validate", func(w http.ResponseWriter, r *http.Request) {
 		fail := func(status int, code string) {
@@ -52,12 +54,24 @@ func (a *app) modulePreflightRoutes(mux *http.ServeMux) {
 			writeJSON(w, 400, map[string]any{"valid": false, "compatible": false, "issues": issues, "compatibilityIssues": []moduleValidationIssue{}})
 			return
 		}
-		compatibility := []moduleValidationIssue{{"components", "runtime_unavailable"}}
+		compatibility := []moduleValidationIssue{}
 		for i, c := range pkg.Components {
-			for j := range c.Requires {
-				compatibility = append(compatibility, moduleValidationIssue{fmt.Sprintf("components.%d.requires.%d", i, j), "capability_unavailable"})
+			for j, capability := range c.Requires {
+				if !slices.Contains(moduleHostCapabilities, capability) {
+					compatibility = append(compatibility, moduleValidationIssue{fmt.Sprintf("components.%d.requires.%d", i, j), "capability_unavailable"})
+				}
+			}
+			for j, t := range c.Triggers {
+				if t.Type == "event" {
+					compatibility = append(compatibility, moduleValidationIssue{fmt.Sprintf("components.%d.triggers.%d", i, j), "trigger_unavailable"})
+				}
+			}
+			if c.Location == "monitor" {
+				if _, ok := c.Binaries[runtime.GOOS+"-"+runtime.GOARCH]; !ok {
+					compatibility = append(compatibility, moduleValidationIssue{fmt.Sprintf("components.%d.binaries", i), "platform_unavailable"})
+				}
 			}
 		}
-		writeJSON(w, 200, map[string]any{"valid": true, "compatible": false, "issues": []moduleValidationIssue{}, "compatibilityIssues": compatibility})
+		writeJSON(w, 200, map[string]any{"valid": true, "compatible": len(compatibility) == 0, "issues": []moduleValidationIssue{}, "compatibilityIssues": compatibility})
 	})
 }

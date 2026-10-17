@@ -62,6 +62,8 @@ export function moduleChartSeries(
 }
 export function formatModuleValue(value: unknown, unit?: string, locale: Locale = 'en') {
   if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean')
+    return locale === 'ru' ? (value ? 'Да' : 'Нет') : value ? 'Yes' : 'No';
   if (typeof value === 'number')
     return `${formatNumber(value, locale, { useGrouping: false })}${unit ? ' ' + unit : ''}`;
   return typeof value === 'object' ? JSON.stringify(value) : String(value);

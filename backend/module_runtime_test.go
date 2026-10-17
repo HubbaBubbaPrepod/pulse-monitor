@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,5 +64,35 @@ func TestModuleRuntimeRedactsSecretValuesWithoutCorruptingJSON(t *testing.T) {
 	json.Unmarshal(got, &value)
 	if value["token"] != "prefix-[REDACTED]-suffix" {
 		t.Fatal(string(got))
+	}
+}
+func TestModuleRedactionIncludesKeysAndBoundsOutput(t *testing.T) {
+	got := redactModuleData(json.RawMessage(`{"private-token":"private-token"}`), []string{"private-token", "a"})
+	var data map[string]any
+	json.Unmarshal(got, &data)
+	if _, ok := data["private-token"]; ok {
+		t.Fatal("secret key exposed")
+	}
+	if data["[REDACTED]"] != "[REDACTED]" {
+		t.Fatal("replacement was reprocessed", string(got))
+	}
+	raw, _ := json.Marshal(map[string]string{"value": strings.Repeat("x", 100*1024)})
+	if got := redactModuleData(raw, []string{"x"}); len(got) != 0 {
+		t.Fatal("expanded output must fail closed", len(got))
+	}
+}
+func TestModuleRuntimeExecutesStoredArtifactOnCurrentPlatform(t *testing.T) {
+	t.Setenv("PULSE_RUNTIME_TEST_HELPER", "1")
+	binary, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), moduleArtifactFilename(runtime.GOOS+"-"+runtime.GOARCH))
+	if err = os.WriteFile(path, binary, 0700); err != nil {
+		t.Fatal(err)
+	}
+	input := moduleInvocation{Protocol: 2, Config: map[string]any{}, Input: map[string]any{"fixture": true}}
+	if _, err = runModuleInvocation(context.Background(), path, input, "-test.run=TestModuleRuntimeChild"); err != nil {
+		t.Fatal("stored native artifact cannot run", err)
 	}
 }

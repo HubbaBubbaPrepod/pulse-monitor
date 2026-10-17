@@ -30,6 +30,8 @@ type moduleOperation struct {
 	Status              string          `json:"status"`
 	Platform            string          `json:"platform,omitempty"`
 	SHA256              string          `json:"sha256,omitempty"`
+	StartedAt           time.Time       `json:"startedAt,omitempty"`
+	Target              map[string]any  `json:"target,omitempty"`
 	CreatedAt           time.Time       `json:"createdAt"`
 	ExpiresAt           time.Time       `json:"expiresAt"`
 	FinishedAt          time.Time       `json:"finishedAt,omitempty"`
@@ -185,7 +187,7 @@ func (a *app) authorizedOperation(op moduleOperation) (modulePackageV2, moduleCo
 	}
 	return p, c, cfg, nil
 }
-func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, server, trigger, action string, input map[string]any, event json.RawMessage) (moduleOperation, int, error) {
+func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, server, trigger, action string, input map[string]any, event json.RawMessage, scheduleKey ...string) (moduleOperation, int, error) {
 	op := moduleOperation{ModuleID: p.ID, ComponentID: c.ID, Version: p.Version, ServerID: server, Location: c.Location, Trigger: trigger, Action: action, Input: input, Event: event, Status: "pending", CreatedAt: time.Now().UTC()}
 	op.ExpiresAt = op.CreatedAt.Add(time.Minute)
 	if trigger == "manual" {
@@ -199,6 +201,14 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 			return op, 400, errors.New("Unknown component action")
 		}
 		op.Mutating = t.Mutating
+		op.Target = map[string]any{}
+		for _, field := range t.InputFields {
+			if field.Type != "password" {
+				if value, ok := input[field.Key]; ok {
+					op.Target[field.Key] = value
+				}
+			}
+		}
 		if validateModuleConfig(moduleManifest{Fields: t.InputFields}, input, true) != nil {
 			return op, 400, errors.New("Invalid action input")
 		}
@@ -208,6 +218,15 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 		return op, 403, err
 	}
 	op.ConfigurationDigest = moduleConfigurationDigest(cfg)
+	if len(scheduleKey) > 0 {
+		digest := sha256.Sum256([]byte(scheduleKey[0]))
+		op.ID = hex.EncodeToString(digest[:])
+		if old, err := a.moduleOperation(op.ID); err == nil {
+			return old, 202, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return op, 500, err
+		}
+	}
 	if c.Location == "agent" {
 		a.telemetryMu.RLock()
 		node := a.nodes[server]
@@ -251,12 +270,15 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 			return op, 429, errors.New("Module audit capacity reached")
 		}
 	}
-	op.ID, err = randomToken()
-	if err == nil {
-		digest := sha256.Sum256([]byte(op.ID))
+	if op.ID == "" {
+		token, e := randomToken()
+		if e != nil {
+			return op, 500, e
+		}
+		digest := sha256.Sum256([]byte(token))
 		op.ID = hex.EncodeToString(digest[:])
-		err = a.saveModuleOperation(op)
 	}
+	err = a.saveModuleOperation(op)
 	if err != nil {
 		return op, 500, err
 	}
@@ -287,6 +309,7 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 		return lease, errors.New("Unsupported component platform")
 	}
 	op.Status = "running"
+	op.StartedAt = time.Now().UTC()
 	op.Platform = target
 	op.SHA256 = binary.SHA256
 	secrets := []string{}
@@ -340,11 +363,7 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 	return lease, nil
 }
 func (a *app) componentStatePath(op moduleOperation) string {
-	scope := "monitor"
-	if op.ServerID != "" {
-		scope = "server-" + op.ServerID
-	}
-	return filepath.Join(a.dir, "extension-state", op.ModuleID, op.ComponentID, scope+".json")
+	return filepath.Join(a.dir, "extension-state", op.ModuleID, op.ComponentID, moduleScopeKey(op.ServerID)+".json")
 }
 func (a *app) finishModuleOperation(op moduleOperation, out moduleInvocationResult, runErr error) error {
 	op.FinishedAt = time.Now().UTC()
@@ -364,15 +383,19 @@ func (a *app) finishModuleOperation(op moduleOperation, out moduleInvocationResu
 		op.Error = "Component reported an error"
 		if out.Error != "" {
 			op.Error = out.Error
-			for _, secret := range op.Secrets {
-				if secret != "" {
-					op.Error = strings.ReplaceAll(op.Error, secret, "[REDACTED]")
-				}
-			}
+			op.Error = moduleSecretReplacer(op.Secrets).Replace(op.Error)
 		}
 	}
 	if len(out.Data) > 0 {
 		op.Data = redactModuleData(out.Data, op.Secrets)
+		if len(op.Data) == 0 {
+			op.Status = "failed"
+			if op.Mutating {
+				op.Status = "unknown"
+			}
+			op.Error = "Sanitized component output exceeds limit"
+			op.Data = json.RawMessage(`{}`)
+		}
 	}
 	if runErr == nil {
 		_, _, cfg, err := a.authorizedOperation(op)
@@ -386,16 +409,37 @@ func (a *app) finishModuleOperation(op moduleOperation, out moduleInvocationResu
 			}
 			op.Error = "Component attempted an ungranted state write"
 		} else if len(out.State) > 0 && slices.Contains(cfg.Grants, "state.write") {
-			path := a.componentStatePath(op)
-			if os.MkdirAll(filepath.Dir(path), 0700) != nil || saveJSON(path, out.State) != nil {
-				return errors.New("Could not persist component state")
+			encoded, _ := json.Marshal(out.State)
+			if len(encoded) > 1024*1024 {
+				op.Status = "failed"
+				if op.Mutating {
+					op.Status = "unknown"
+				}
+				op.Error = "Encoded component state exceeds limit"
+			} else {
+				path := a.componentStatePath(op)
+				if os.MkdirAll(filepath.Dir(path), 0700) != nil || saveJSON(path, out.State) != nil {
+					return errors.New("Could not persist component state")
+				}
 			}
 		}
+	}
+	if op.Target != nil {
+		raw, _ := json.Marshal(op.Target)
+		var target map[string]any
+		json.Unmarshal(redactModuleData(raw, op.Secrets), &target)
+		op.Target = target
 	}
 	op.Input = nil
 	op.Secrets = nil
 	op.Event = nil
-	return a.saveModuleOperation(op)
+	if err := a.saveModuleOperation(op); err != nil {
+		return err
+	}
+	if op.Trigger == "interval" {
+		return a.saveComponentSnapshot(op)
+	}
+	return nil
 }
 
 func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
@@ -452,6 +496,12 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			return
 		}
 		for _, op := range ops {
+			if op.Location == "agent" && op.ServerID == r.PathValue("id") && op.Status == "running" && time.Now().Before(op.ExpiresAt) {
+				writeJSON(w, 200, []moduleLease{})
+				return
+			}
+		}
+		for _, op := range ops {
 			if op.Status != "pending" || op.Location != "agent" || op.ServerID != r.PathValue("id") {
 				continue
 			}
@@ -505,7 +555,7 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		http.ServeFile(w, r, filepath.Join(a.dir, "extensions", op.ModuleID, op.Version, op.ComponentID, op.Platform))
+		http.ServeFile(w, r, filepath.Join(a.dir, "extensions", op.ModuleID, op.Version, op.ComponentID, moduleArtifactFilename(op.Platform)))
 	})
 	mux.HandleFunc("POST /api/agent/{id}/module-operations/{operation}/result", func(w http.ResponseWriter, r *http.Request) {
 		if !a.agentAuthorized(r) {
@@ -562,6 +612,7 @@ func (a *app) runModuleRuntime(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		_ = a.scheduleExtensionOperations(time.Now().UTC())
 		a.extensionMu.Lock()
 		ops, err := a.moduleOperations()
 		var lease moduleLease
@@ -597,7 +648,7 @@ func (a *app) runModuleRuntime(ctx context.Context) error {
 		a.extensionMu.Unlock()
 		// Queue errors prevent dispatch; authenticated API calls expose storage errors.
 		if lease.ID != "" {
-			path := filepath.Join(a.dir, "extensions", lease.ModuleID, lease.Version, lease.ComponentID, runtime.GOOS+"-"+runtime.GOARCH)
+			path := filepath.Join(a.dir, "extensions", lease.ModuleID, lease.Version, lease.ComponentID, moduleArtifactFilename(runtime.GOOS+"-"+runtime.GOARCH))
 			data, readErr := os.ReadFile(path)
 			sum := sha256.Sum256(data)
 			var result moduleInvocationResult
@@ -613,7 +664,7 @@ func (a *app) runModuleRuntime(ctx context.Context) error {
 				a.moduleCancels[lease.ID] = cancel
 			}
 			a.extensionMu.Unlock()
-			if runErr == nil && !strings.EqualFold(hex.EncodeToString(sum[:]),lease.SHA256) {
+			if runErr == nil && !strings.EqualFold(hex.EncodeToString(sum[:]), lease.SHA256) {
 				runErr = errors.New("Artifact digest changed")
 			}
 			if runErr == nil {

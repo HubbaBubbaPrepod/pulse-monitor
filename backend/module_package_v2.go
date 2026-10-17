@@ -41,16 +41,21 @@ type moduleViewV2 struct {
 	RowKey  string   `json:"rowKey,omitempty"`
 	Actions []string `json:"actions,omitempty"`
 }
+type moduleRowCondition struct {
+	Key    string   `json:"key"`
+	Values []string `json:"values"`
+}
 type moduleTriggerV2 struct {
-	Type        string        `json:"type"`
-	Seconds     *int          `json:"seconds,omitempty"`
-	Events      *[]string     `json:"events,omitempty"`
-	Action      *string       `json:"action,omitempty"`
-	Label       string        `json:"label,omitempty"`
-	Mutating    bool          `json:"mutating,omitempty"`
-	InputFields []moduleField `json:"inputFields,omitempty"`
-	InputKey    string        `json:"inputKey,omitempty"`
-	ResultView  string        `json:"resultView,omitempty"`
+	When        *moduleRowCondition `json:"when,omitempty"`
+	Type        string              `json:"type"`
+	Seconds     *int                `json:"seconds,omitempty"`
+	Events      *[]string           `json:"events,omitempty"`
+	Action      *string             `json:"action,omitempty"`
+	Label       string              `json:"label,omitempty"`
+	Mutating    bool                `json:"mutating,omitempty"`
+	InputFields []moduleField       `json:"inputFields,omitempty"`
+	InputKey    string              `json:"inputKey,omitempty"`
+	ResultView  string              `json:"resultView,omitempty"`
 }
 
 // Reject duplicate members before typed decoding: encoding/json otherwise keeps
@@ -90,7 +95,7 @@ func uniqueJSONValue(d *json.Decoder, depth int, member ...string) error {
 			}
 			var ok bool
 			name, ok = key.(string)
-			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64 views rowKey actions kind title columns unit mutating inputFields inputKey resultView")
+			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64 views rowKey actions kind title columns unit mutating inputFields inputKey resultView when values")
 			if !ok || seen[name] || !slices.Contains(allowed, name) {
 				return errors.New("Duplicate JSON member")
 			}
@@ -161,10 +166,10 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 	total := 0
 	for i, c := range p.Components {
 		path := fmt.Sprintf("components.%d", i)
-		if !validID.MatchString(c.ID) || seen[c.ID] {
+		if !validID.MatchString(c.ID) || seen[strings.ToLower(c.ID)] {
 			add(path+".id", "invalid_component_id")
 		}
-		seen[c.ID] = true
+		seen[strings.ToLower(c.ID)] = true
 		if !slices.Contains([]string{"agent", "monitor"}, c.Location) || c.Protocol != 2 {
 			add(path, "invalid_runtime")
 		}
@@ -219,11 +224,21 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 			case "manual":
 				valid = t.Action != nil && validID.MatchString(*t.Action) && t.Events == nil && t.Seconds == nil
 			}
-			if t.Type != "manual" && (t.Mutating || len(t.InputFields) > 0 || t.InputKey != "" || t.ResultView != "") {
+			if t.Type != "manual" && (t.Mutating || len(t.InputFields) > 0 || t.InputKey != "" || t.ResultView != "" || t.When != nil) {
 				valid = false
 			}
 			if len(t.Label) > 128 || !slices.Contains([]string{"", "logs", "cards", "table"}, t.ResultView) || len(t.InputFields) > 32 {
 				valid = false
+			}
+			if t.When != nil {
+				if !validID.MatchString(t.When.Key) || len(t.When.Values) == 0 || len(t.When.Values) > 16 {
+					valid = false
+				}
+				for _, value := range t.When.Values {
+					if len(value) == 0 || len(value) > 128 {
+						valid = false
+					}
+				}
 			}
 			inputKeys := map[string]bool{}
 			for _, f := range t.InputFields {
@@ -261,6 +276,21 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 				}
 			}
 		}
+	}
+	// The persisted manifest uses the same bounded reader as other private metadata.
+	metadata := p
+	metadata.Components = append([]moduleComponentV2(nil), p.Components...)
+	for i, c := range metadata.Components {
+		binaries := map[string]moduleBinary{}
+		for target, b := range c.Binaries {
+			b.Content = nil
+			binaries[target] = b
+		}
+		metadata.Components[i].Binaries = binaries
+	}
+	encoded, err := json.Marshal(metadata)
+	if err != nil || len(encoded) > 2*1024*1024 {
+		add("package", "metadata_too_large")
 	}
 	if total > 48*1024*1024 {
 		add("components", "package_too_large")

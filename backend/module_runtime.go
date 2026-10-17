@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 )
@@ -89,7 +90,22 @@ func validateModuleInvocationResult(result *moduleInvocationResult) error {
 	return nil
 }
 
-// Redact string values recursively, without replacing JSON syntax or numbers.
+func moduleSecretReplacer(secrets []string) *strings.Replacer {
+	secrets = append([]string(nil), secrets...)
+	sort.SliceStable(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	pairs := []string{}
+	seen := map[string]bool{}
+	for _, secret := range secrets {
+		if secret != "" && !seen[secret] {
+			pairs = append(pairs, secret, "[REDACTED]")
+			seen[secret] = true
+		}
+	}
+	return strings.NewReplacer(pairs...)
+}
+
+// Private state is deliberately separate from public data and is not redacted.
+// Replacement text is never processed again by another secret replacement.
 func redactModuleData(raw json.RawMessage, secrets []string) json.RawMessage {
 	var value any
 	d := json.NewDecoder(bytes.NewReader(raw))
@@ -97,30 +113,28 @@ func redactModuleData(raw json.RawMessage, secrets []string) json.RawMessage {
 	if d.Decode(&value) != nil {
 		return json.RawMessage(`{}`)
 	}
+	replace := moduleSecretReplacer(secrets).Replace
 	var walk func(any) any
 	walk = func(v any) any {
 		switch x := v.(type) {
 		case string:
-			for _, secret := range secrets {
-				if secret != "" {
-					x = strings.ReplaceAll(x, secret, "[REDACTED]")
-				}
-			}
-			return x
+			return replace(x)
 		case []any:
 			for i, item := range x {
 				x[i] = walk(item)
 			}
 		case map[string]any:
+			out := map[string]any{}
 			for key, item := range x {
-				x[key] = walk(item)
+				out[replace(key)] = walk(item)
 			}
+			return out
 		}
 		return v
 	}
 	result, err := json.Marshal(walk(value))
-	if err != nil {
-		return json.RawMessage(`{}`)
+	if err != nil || len(result) > 512*1024 {
+		return nil
 	}
 	return result
 }

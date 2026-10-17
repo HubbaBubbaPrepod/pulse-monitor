@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -158,4 +159,63 @@ func TestModulePackageV2RejectsAggregateBinarySize(t *testing.T) {
 		}
 	}
 	t.Fatal("aggregate binary limit not enforced", issues)
+}
+func TestModulePackageV2ChecksActionConditions(t *testing.T) {
+	var p map[string]any
+	json.Unmarshal(v2PackageJSON(t, "agent"), &p)
+	c := p["components"].([]any)[0].(map[string]any)
+	trigger := c["triggers"].([]any)[0].(map[string]any)
+	trigger["when"] = map[string]any{"key": "state", "values": []string{"exited"}}
+	raw, _ := json.Marshal(p)
+	decoded, err := decodeModulePackageV2(raw)
+	if err != nil || len(validateModulePackageV2(decoded)) > 0 {
+		t.Fatal("valid condition rejected", err)
+	}
+	trigger["when"] = map[string]any{"key": "state", "values": []string{}}
+	raw, _ = json.Marshal(p)
+	decoded, err = decodeModulePackageV2(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(validateModulePackageV2(decoded)) == 0 {
+		t.Fatal("empty availability condition accepted")
+	}
+}
+func TestModulePackageV2RejectsCaseAliasComponents(t *testing.T) {
+	p, err := decodeModulePackageV2(v2PackageJSON(t, "monitor", "monitor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Components[1].ID = strings.ToUpper(p.Components[0].ID)
+	if len(validateModulePackageV2(p)) == 0 {
+		t.Fatal("case alias components accepted")
+	}
+}
+func TestModulePackageV2RejectsUnreadableMetadata(t *testing.T) {
+	p, err := decodeModulePackageV2(v2PackageJSON(t, "monitor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := p.Components[0]
+	for key, b := range component.Binaries {
+		b.Content = nil
+		component.Binaries[key] = b
+	}
+	component.Fields = nil
+	for i := 0; i < 32; i++ {
+		component.Fields = append(component.Fields, moduleField{Key: fmt.Sprintf("field%d", i), Type: "text", Default: strings.Repeat("x", 4096)})
+	}
+	p.Components = nil
+	for i := 0; i < 16; i++ {
+		c := component
+		c.ID = fmt.Sprintf("component%d", i)
+		p.Components = append(p.Components, c)
+	}
+	issues := validateModulePackageV2Content(p, false)
+	for _, issue := range issues {
+		if issue.Code == "metadata_too_large" {
+			return
+		}
+	}
+	t.Fatal("manifest exceeds persisted metadata reader bound", issues)
 }

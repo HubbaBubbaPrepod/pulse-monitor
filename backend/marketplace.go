@@ -311,6 +311,10 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 409, "Module ID already installed; use manual import for updates")
 		return
 	}
+	if _, err := a.extension(input.ID); !errors.Is(err, os.ErrNotExist) {
+		apiError(w, 409, "Module ID already installed; use manual import for updates")
+		return
+	}
 	data, err := marketplaceFetch(r.Context(), origin, "/api/v1/packages/"+input.SHA256, metadata.Size)
 	if err != nil {
 		apiError(w, 502, "Package unavailable")
@@ -333,5 +337,10 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(data))
+	r.ContentLength = int64(len(data))
+	if manifest.SchemaVersion == 2 {
+		a.installExtensionPackage(w, r, origin.String())
+		return
+	}
 	a.installModulePackage(w, r, origin.String())
 }
