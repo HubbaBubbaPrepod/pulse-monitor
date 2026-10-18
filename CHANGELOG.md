@@ -2,6 +2,10 @@
 
 # Changelog
 
+## [0.6.1] — 2026-10-18
+
+- Align preview log columns with the source visibility breakpoint, keep timestamps readable and allow horizontal scrolling of grouped archives on phones. Backend behavior is unchanged.
+
 ## [0.6.0] — 2026-10-18
 
 - Update modules from the opt-in Marketplace or offline JSON import. Bind catalog updates to the selected publisher, preserve compatible v2 configuration and require renewed grants after contract changes. Retire legacy v1 manifests when importing their v2 replacement; retain old binaries and data.

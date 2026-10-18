@@ -2771,7 +2771,7 @@ select option {
   padding: 3px 5px;
 }
 .app-shell .log-feed-preview .log-line {
-  grid-template-columns: 68px 52px 85px minmax(0, 1fr);
+  grid-template-columns: 105px 52px 100px minmax(0, 1fr);
   gap: 10px;
 }
 .app-shell .panel-title,
@@ -2811,9 +2811,9 @@ select option {
   max-width: 520px;
   font-size: 14px;
 }
-@media (max-width: 700px) {
+@media (max-width: 760px) {
   .app-shell .log-feed-preview .log-line {
-    grid-template-columns: 65px 50px minmax(0, 1fr);
+    grid-template-columns: 105px 50px minmax(0, 1fr);
   }
   .log-feed-preview .log-source {
     display: none;
@@ -3521,6 +3521,7 @@ body {
 }
 .logs-panel .log-groups {
   padding: 0 20px;
+  overflow-x: auto;
 }
 .logs-panel .log-groups > .log-feed {
   padding: 0;
