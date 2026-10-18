@@ -1,24 +1,49 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
+// Package tests need a native artifact, not the SQLite- and race-instrumented
+// test runner, which can exceed the module upload limit.
+var collectorFixture = sync.OnceValues(func() ([]byte, error) {
+	dir, err := os.MkdirTemp("", "pulse-collector-fixture-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "collector")
+	if runtime.GOOS == "windows" {
+		path += ".exe"
+	}
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-trimpath", "-ldflags=-s -w", "-o", path, "./testdata/collector")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("build collector fixture: %w\n%s", err, output)
+	}
+	return os.ReadFile(path)
+})
+
 func collectorPackage(t *testing.T) moduleManifest {
 	t.Helper()
-	content, err := os.ReadFile(os.Args[0])
+	fixture, err := collectorFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
+	content := bytes.Clone(fixture)
 	hash := sha256.Sum256(content)
 	return moduleManifest{SchemaVersion: 1, Protocol: 1, ID: "example", Version: "1.0.0", Name: "Example", Fields: []moduleField{{Key: "endpoint", Label: "Endpoint", Type: "text", Required: true}}, Binaries: map[string]moduleBinary{runtime.GOOS + "-" + runtime.GOARCH: {SHA256: hex.EncodeToString(hash[:]), Content: content}}}
 }
