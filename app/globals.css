@@ -3491,7 +3491,7 @@ body {
 
 /* Overview uses a summary table; full process details remain on /processes/. */
 .bottom-grid {
-  align-items: start;
+  align-items: stretch;
 }
 .process-preview .process-table {
   table-layout: fixed;

@@ -2,6 +2,10 @@
 
 # Changelog
 
+## [0.6.2] — 2026-10-18
+
+- Match the height of the overview process and log cards when displayed side by side.
+
 ## [0.6.1] — 2026-10-18
 
 - Align preview log columns with the source visibility breakpoint, keep timestamps readable and allow horizontal scrolling of grouped archives on phones. Backend behavior is unchanged.
