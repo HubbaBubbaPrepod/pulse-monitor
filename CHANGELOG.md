@@ -2,6 +2,10 @@
 
 # Changelog
 
+## [0.6.3] — 2026-10-18
+
+- Fill the overview process card with a responsive number of rows based on the adjacent log card height.
+
 ## [0.6.2] — 2026-10-18
 
 - Match the height of the overview process and log cards when displayed side by side.

@@ -3493,8 +3493,19 @@ body {
 .bottom-grid {
   align-items: stretch;
 }
+.process-preview {
+  display: flex;
+  flex-direction: column;
+}
+.process-preview .table-scroll {
+  flex: 1;
+}
 .process-preview .process-table {
   table-layout: fixed;
+  height: 100%;
+}
+.process-preview thead {
+  height: 1px;
 }
 .process-preview :is(th, td):is(:nth-child(2), :nth-child(6), :nth-child(7), :nth-child(8)),
 .process-preview .process-table:not(.has-gpu) :is(th, td):nth-child(5) {

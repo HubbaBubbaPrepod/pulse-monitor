@@ -1,6 +1,6 @@
 'use client';
 import { useLocale, tr, trText } from './locale';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Copy, Download, ArrowUpRight } from 'lucide-react';
 import { formatNumber } from '@/lib/i18n';
 import { csv, download, type Process } from '@/lib/data';
@@ -26,7 +26,49 @@ export function ProcessTable({
   const [sort, setSort] = useState<SortField>(sortBy ?? 'cpu');
   const [descending, setDescending] = useState(sortBy !== 'name');
   const [detail, setDetail] = useState<Process | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [previewRows, setPreviewRows] = useState(7);
   const values = snapshot?.processes ?? [];
+  useEffect(() => {
+    if (!preview || !values.length) return;
+    const table = tableRef.current;
+    const panel = table?.closest('.process-preview');
+    const logs = panel?.parentElement?.querySelector('.log-preview');
+    const feed = logs?.querySelector('.log-feed');
+    if (!table || !panel || !logs || !feed) return;
+    const measure = () => {
+      const beside =
+        Math.abs(panel.getBoundingClientRect().top - logs.getBoundingClientRect().top) < 2;
+      if (!beside) {
+        setPreviewRows(7);
+        return;
+      }
+      const cell = table.querySelector('tbody td');
+      const content = cell?.firstElementChild;
+      const header = table.querySelector('thead');
+      if (!cell || !content || !header) return;
+      const style = getComputedStyle(cell);
+      const rowHeight =
+        content.getBoundingClientRect().height +
+        parseFloat(style.paddingTop) +
+        parseFloat(style.paddingBottom) +
+        1;
+      const targetHeight =
+        feed.getBoundingClientRect().height +
+        (logs.querySelector('.panel-title')?.getBoundingClientRect().height ?? 0);
+      const available =
+        targetHeight -
+        (panel.querySelector('.panel-title')?.getBoundingClientRect().height ?? 0) -
+        header.getBoundingClientRect().height -
+        2;
+      setPreviewRows(Math.max(1, Math.floor(available / rowHeight)));
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(feed);
+    observer.observe(panel);
+    measure();
+    return () => observer.disconnect();
+  }, [preview, values.length]);
   const filtered = sortProcesses(
     values.filter((p) =>
       `${p.name} ${p.pid} ${p.user}`.toLowerCase().includes(query.toLowerCase()),
@@ -34,7 +76,7 @@ export function ProcessTable({
     sort,
     descending,
   );
-  const rows = preview ? filtered.slice(0, 4) : filtered;
+  const rows = preview ? filtered.slice(0, previewRows) : filtered;
   function changeSort(field: typeof sort) {
     if (field === sort) setDescending((v) => !v);
     else {
@@ -46,7 +88,7 @@ export function ProcessTable({
     <>
       {trText(
         rows.length ? (
-          <div className="table-scroll">
+          <div className="table-scroll" ref={tableRef}>
             <table
               className={`process-table ${values.some((p) => p.gpu != null) ? 'has-gpu' : ''}`}
             >
