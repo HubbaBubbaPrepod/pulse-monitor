@@ -2,6 +2,11 @@
 
 # Changelog
 
+## [0.6.4] — 2026-10-19
+
+- Keep Monitor running when an offline-event write times out. Retry availability checks without discarding unsaved events.
+- Use a small native module fixture so race-enabled CI tests stay within upload limits.
+
 ## [0.6.3] — 2026-10-18
 
 - Fill the overview process card with a responsive number of rows based on the adjacent log card height.

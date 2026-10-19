@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -323,8 +324,13 @@ func (a *app) collect(ctx context.Context) error {
 	defer timer.Stop()
 	for {
 		for _, s := range a.serverList() {
+			if ctx.Err() != nil {
+				return nil
+			}
 			if err := a.checkAgentOffline(s); err != nil {
-				return err
+				if ctx.Err() == nil {
+					slog.Warn("agent availability check failed; will retry", "server", s.ID, "error", err)
+				}
 			}
 		}
 		select {

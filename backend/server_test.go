@@ -13,6 +13,63 @@ import (
 	"time"
 )
 
+func TestCollectionRetriesOfflineEventAfterStorageTimeout(t *testing.T) {
+	a, err := newTestApp(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.nodes["production-01"] = &agentNode{Seen: time.Now().Add(-time.Minute)}
+	// Occupy the single writer connection so the real event write times out.
+	writer, err := a.storage.writer.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.collect(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		writer.Close()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("collection did not stop after cancellation")
+		}
+	})
+	select {
+	case err := <-done:
+		done <- err
+		t.Fatalf("storage timeout stopped collection: %v", err)
+	case <-time.After(6 * time.Second):
+	}
+	a.telemetryMu.RLock()
+	seen := a.nodes["production-01"].Seen
+	a.telemetryMu.RUnlock()
+	if seen.IsZero() {
+		t.Fatal("node marked offline before its event was saved")
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		a.telemetryMu.RLock()
+		seen = a.nodes["production-01"].Seen
+		a.telemetryMu.RUnlock()
+		if seen.IsZero() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("collection did not retry after the writer became available")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	events, err := a.storage.loadEvents(context.Background())
+	if err != nil || len(events) != 1 || events[0].ServerID != "production-01" {
+		t.Fatalf("offline event was not saved exactly once: %v %v", events, err)
+	}
+}
+
 func TestAPIErrorsExposeStableCodeAndDiagnostic(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
