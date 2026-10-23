@@ -1,8 +1,8 @@
 #requires -Version 7.4
 param(
- [string]$Version='v0.4.0',
+ [string]$Version='v0.6.5',
  [string]$GoExe='go',
- [string]$GoToolchain='go1.27.2',
+ [string]$GoToolchain='go1.27.3',
  [switch]$SkipFrontend
 )
 $ErrorActionPreference='Stop'

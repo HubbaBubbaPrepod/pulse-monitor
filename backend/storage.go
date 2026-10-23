@@ -22,6 +22,7 @@ var storageSchemas embed.FS
 
 type sqliteStore struct {
 	writer, reader *sql.DB
+	path           string
 	closeOnce      sync.Once
 	closeErr       error
 }
@@ -58,7 +59,7 @@ func openSQLite(dir string) (result *sqliteStore, err error) {
 		q.Add("_pragma", v)
 	}
 	uri.RawQuery = q.Encode()
-	s := &sqliteStore{}
+	s := &sqliteStore{path: filepath.Join(dir, "pulse.db")}
 	defer func() {
 		if err != nil {
 			s.Close()
@@ -84,6 +85,11 @@ func openSQLite(dir string) (result *sqliteStore, err error) {
 	}
 	if mode != "wal" {
 		return nil, errors.New("SQLite WAL could not be enabled")
+	}
+	// Recycle an oversized journal after a completed checkpoint; this is not
+	// a hard quota and cannot truncate pages pinned by an active reader.
+	if _, err = s.writer.ExecContext(ctx, "PRAGMA journal_size_limit=16777216"); err != nil {
+		return nil, err
 	}
 	var version string
 	if err = s.writer.QueryRowContext(ctx, "SELECT sqlite_version()").Scan(&version); err != nil {

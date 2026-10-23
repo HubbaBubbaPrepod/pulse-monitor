@@ -97,7 +97,7 @@ func run() error {
 		}
 		files.ServeHTTP(w, r)
 	})
-	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
+	srv := &http.Server{Addr: *addr, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	errCh := make(chan error, 4)
 	var workers sync.WaitGroup

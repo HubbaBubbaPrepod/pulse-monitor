@@ -63,6 +63,8 @@ func (s *sqliteStore) appendLogs(ctx context.Context, rows []logEntry, received 
 	return tx.Commit()
 }
 func (s *sqliteStore) queryLogs(ctx context.Context, id, level, source, query, before string, offset, limit int, category string) (logPage, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	out := logPage{Items: []logEntry{}}
 	where := "server_id=?"
 	args := []any{id}
@@ -116,4 +118,28 @@ func (s *sqliteStore) queryLogs(ctx context.Context, id, level, source, query, b
 		return out, err
 	}
 	return out, tx.Commit()
+}
+
+// Recent telemetry polling must not scan/count the complete archive.
+func (s *sqliteStore) recentLogs(ctx context.Context, id string) ([]logEntry, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	items := []logEntry{}
+	rows, err := s.reader.QueryContext(ctx, "SELECT body FROM collected_logs WHERE server_id=? ORDER BY row_no DESC LIMIT 100", id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		var entry logEntry
+		if err = rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(raw, &entry); err != nil {
+			return nil, err
+		}
+		items = append(items, entry)
+	}
+	return items, rows.Err()
 }

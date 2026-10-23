@@ -172,6 +172,19 @@ func (a *app) handler() http.Handler {
 		}
 		writeJSON(w, 200, a.snapshot(s, period))
 	})
+	mux.HandleFunc("GET /api/servers/{id}/recent-logs", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := a.findServer(id); !ok {
+			apiError(w, 404, "Server not found")
+			return
+		}
+		items, err := a.storage.recentLogs(r.Context(), id)
+		if err != nil {
+			apiError(w, 503, "Recent logs temporarily unavailable")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": items})
+	})
 	mux.HandleFunc("GET /api/servers/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if _, ok := a.findServer(id); !ok {

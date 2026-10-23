@@ -54,7 +54,7 @@ func runModuleInvocation(ctx context.Context, path string, input moduleInvocatio
 	var output moduleOutputBuffer
 	cmd.Stdout = &output
 	cmd.WaitDelay = time.Second
-	if err := cmd.Run(); err != nil {
+	if err := runModuleCommand(cmd); err != nil {
 		return result, errors.New("Component failed or timed out; outcome may be unknown")
 	}
 	d := json.NewDecoder(bytes.NewReader(output.Bytes()))

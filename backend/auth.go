@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"net/mail"
 	"os"
@@ -132,28 +131,8 @@ func (a *app) issueSession(w http.ResponseWriter, r *http.Request, status int) {
 	writeJSON(w, status, map[string]any{"authenticated": true, "setupRequired": false, "csrfToken": csrf, "user": map[string]string{"id": account.ID, "name": account.Name, "email": account.Email}})
 }
 func (a *app) credentials(w http.ResponseWriter, r *http.Request, register bool) {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-	a.auth.mu.Lock()
-	now := time.Now()
-	for key, v := range a.auth.attempts {
-		if now.After(v.Until) {
-			delete(a.auth.attempts, key)
-		}
-	}
-	v, known := a.auth.attempts[ip]
-	if v.Until.IsZero() {
-		v.Until = now.Add(time.Minute)
-	}
-	v.Count++
-	allowed := v.Count <= 10 && (known || len(a.auth.attempts) < 256)
-	if known || len(a.auth.attempts) < 256 {
-		a.auth.attempts[ip] = v
-	}
-	a.auth.mu.Unlock()
-	if !allowed {
+	if !a.auth.allowCredentialAttempt(clientAddress(r), time.Now()) {
+		w.Header().Set("Retry-After", "60")
 		apiError(w, 429, "Слишком много попыток. Повторите через минуту.")
 		return
 	}
@@ -240,7 +219,7 @@ func (a *app) credentials(w http.ResponseWriter, r *http.Request, register bool)
 		apiError(w, 401, "Неверный email или пароль")
 		return
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(account.Hash), []byte(input.Password))
+	err := bcrypt.CompareHashAndPassword([]byte(account.Hash), []byte(input.Password))
 	if err != nil || input.Email != account.Email {
 		apiError(w, 401, "Неверный email или пароль")
 		return
@@ -264,4 +243,40 @@ func (a *app) authRoutes(mux *http.ServeMux) {
 }
 func validCSRF(r *http.Request, s authSession) bool {
 	return subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.CSRF)) == 1
+}
+
+// Source limits run first so rejected traffic cannot consume the shared
+// password-hashing budget. This single-owner panel also bounds distributed
+// attempts across different source addresses; windows expire after a minute.
+func (a *authState) allowCredentialAttempt(source string, now time.Time) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for key, value := range a.attempts {
+		if !now.Before(value.Until) {
+			delete(a.attempts, key)
+		}
+	}
+	if a.attempts == nil {
+		a.attempts = make(map[string]attemptWindow)
+	}
+	key := "ip:" + source
+	local, known := a.attempts[key]
+	if local.Count >= 10 || (!known && len(a.attempts) >= 256) {
+		return false
+	}
+	global := a.attempts["credentials:global"]
+	if global.Count >= 60 {
+		return false
+	}
+	if local.Until.IsZero() {
+		local.Until = now.Add(time.Minute)
+	}
+	if global.Until.IsZero() {
+		global.Until = now.Add(time.Minute)
+	}
+	local.Count++
+	global.Count++
+	a.attempts[key] = local
+	a.attempts["credentials:global"] = global
+	return true
 }

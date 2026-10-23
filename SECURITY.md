@@ -4,7 +4,7 @@
 
 ## Versions and scope
 
-Report vulnerabilities in the current public release, Pulse Monitor v0.4.0, or the current main branch. Monitor and Agent release independently; include both versions and the Docker module version when relevant. This project does not promise a support period or response deadline.
+Report vulnerabilities in the current public release, Pulse Monitor, or the current main branch. Monitor and Agent release independently; include both versions and the Docker module version when relevant. This project does not promise a support period or response deadline.
 
 ## Private reporting
 

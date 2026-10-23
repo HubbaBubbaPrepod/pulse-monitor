@@ -3,9 +3,44 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
+
+func TestTelemetryCleanupRetainsRecentSamplesAndOnlyRecentEvents(t *testing.T) {
+	db, err := openSQLite(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	now := time.Now()
+	for _, tc := range []struct {
+		id string
+		at time.Time
+	}{{"one", now.Add(-25 * time.Hour)}, {"one", now}, {"two", now.Add(-25 * time.Hour)}} {
+		if _, err = db.writer.ExecContext(ctx, "INSERT INTO metric_samples(server_id,at_ns,body) VALUES(?,?,?)", tc.id, tc.at.UnixNano(), []byte(`{}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 510; i++ {
+		if _, err = db.writer.ExecContext(ctx, "INSERT INTO monitor_events(id,server_id,body) VALUES(?,?,?)", fmt.Sprint(i), "one", []byte(`{}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = db.cleanupTelemetry(ctx, "one", now); err != nil {
+		t.Fatal(err)
+	}
+	var samples, other, events int
+	db.reader.QueryRow("SELECT count(*) FROM metric_samples WHERE server_id='one'").Scan(&samples)
+	db.reader.QueryRow("SELECT count(*) FROM metric_samples WHERE server_id='two'").Scan(&other)
+	db.reader.QueryRow("SELECT count(*) FROM monitor_events").Scan(&events)
+	if samples != 1 || other != 1 || events != 500 {
+		t.Fatalf("unbounded or incorrect cleanup: %d/%d/%d", samples, other, events)
+	}
+}
 
 func TestSQLiteRetentionIsScopedAndUsesReceiptTime(t *testing.T) {
 	db, err := openSQLite(t.TempDir())
@@ -83,5 +118,28 @@ func TestSQLiteRetentionAPIKeepsExistingNodesAndDefaultsNewNodes(t *testing.T) {
 	if saved.LogRetentionDays == nil || *saved.LogRetentionDays != 7 {
 		raw, _ := json.Marshal(saved)
 		t.Fatal("policy lost", string(raw))
+	}
+}
+
+func TestExpiredLogBudgetDoesNotStarveTelemetryRetention(t *testing.T) {
+	db, err := openSQLite(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now()
+	if _, err = db.writer.Exec("INSERT INTO metric_samples(server_id,at_ns,body) VALUES(?,?,?)", "one", now.Add(-25*time.Hour).UnixNano(), []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	err = db.cleanupServer(context.Background(), "one", now, -time.Second)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected exhausted log budget: %v", err)
+	}
+	var count int
+	if err = db.reader.QueryRow("SELECT count(*) FROM metric_samples").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("log budget starved telemetry cleanup")
 	}
 }

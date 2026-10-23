@@ -2,6 +2,14 @@
 
 # Changelog
 
+## Unreleased
+
+- Bound log history reads and observe passive WAL checkpoint progress; poll recent logs without archive counts.
+- Terminate native module process groups / Windows Jobs after cancellation and completion.
+- Protect HTML/API responses, use trusted proxy client identities, and rate-limit each enrolled node.
+- Require NTFS and least-privilege Local Service for Windows installation.
+- Build with Go 1.27.3 and upgrade Next.js to 16.4.2.
+
 ## [0.6.4] — 2026-10-19
 
 - Keep Monitor running when an offline-event write times out. Retry availability checks without discarding unsaved events.

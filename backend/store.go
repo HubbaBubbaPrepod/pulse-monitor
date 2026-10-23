@@ -56,6 +56,7 @@ type app struct {
 	telemetryMu   sync.RWMutex
 	ingestMu      sync.Mutex
 	nodes         map[string]*agentNode
+	reportBudgets map[string]reportBudget
 	publicHost    string
 	eventMu       sync.Mutex
 	events        []monitorEvent

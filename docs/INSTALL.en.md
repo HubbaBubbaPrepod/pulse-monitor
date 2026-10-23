@@ -4,7 +4,7 @@
 
 ## Archives and first launch
 
-From [Releases](https://github.com/HubbaBubbaPrepod/pulse-monitor/releases), choose `pulse-monitor_v0.4.0_linux_amd64.tar.gz`, `pulse-monitor_v0.4.0_linux_arm64.tar.gz`, or `pulse-monitor_v0.4.0_windows_amd64.zip`. Compare SHA-256 with `checksums.txt`: Linux `sha256sum <archive>`, Windows `Get-FileHash <archive> -Algorithm SHA256`. Extract the executable, `out`, and `deployment` together. Keep `data`, tokens, and private keys outside `out`.
+From [Releases](https://github.com/HubbaBubbaPrepod/pulse-monitor/releases), choose `pulse-monitor_v0.6.5_linux_amd64.tar.gz`, `pulse-monitor_v0.6.5_linux_arm64.tar.gz`, or `pulse-monitor_v0.6.5_windows_amd64.zip`. Compare SHA-256 with `checksums.txt`: Linux `sha256sum <archive>`, Windows `Get-FileHash <archive> -Algorithm SHA256`. Extract the executable, `out`, and `deployment` together. Keep `data`, tokens, and private keys outside `out`.
 
 The first launch must use loopback; see the [quick start](../README.en.md#quick-start). The owner's password must contain at least 12 characters and at most 72 UTF-8 bytes. A second owner cannot register after the first. With an SSH tunnel, the server listens on `127.0.0.1:8080` and the browser opens the local tunnel address.
 
@@ -37,11 +37,13 @@ This installs the `PulseMonitor` scheduled task under `C:\ProgramData\PulseMonit
 
 Follow the [Pulse Agent guide](https://github.com/HubbaBubbaPrepod/pulse-agent/blob/main/README.en.md). Each node needs its own ID, token, and state directory. The address in the dashboard registry describes the node's location; the agent uses the dashboard's `-url`. Replacing a token revokes the old one: update the file and restart the agent.
 
-Build from source with Node.js 22.13+, Go 1.23+, and PowerShell 7.4+. Go must be in PATH or supplied through `-GoExe`:
+Build from source with Node.js 22.13+, Go 1.27.3+, and PowerShell 7.4+. Go must be in PATH or supplied through `-GoExe`:
 
 ```powershell
 npm ci
-./scripts/build.ps1 -Version v0.4.0
+./scripts/build.ps1 -Version v0.6.5
 ```
 
 Archives and `checksums.txt` appear in `artifacts/releases`. `-SkipFrontend` uses the existing `out`; the export must match the current source.
+
+Windows installations require NTFS. The scheduled task uses Local Service, reads the executable/static tree and modifies only private data. Move existing exFAT installations and their protected backups to NTFS before upgrading. The installer preserves data but does not relocate it.

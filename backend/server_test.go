@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,41 @@ import (
 	"testing"
 	"time"
 )
+
+func TestRecentLogsAreBoundedScopedAndDoNotRequireArchiveTotals(t *testing.T) {
+	a, err := newTestApp(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := []logEntry{}
+	for i := 0; i < 105; i++ {
+		rows = append(rows, logEntry{ID: fmt.Sprint("recent-", i), ServerID: "production-01", Level: "INFO", Message: "recent entry"})
+	}
+	rows = append(rows, logEntry{ID: "other-node", ServerID: "windows-02", Level: "INFO", Message: "private to another node"})
+	if err := a.storage.appendLogs(context.Background(), rows, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	w := request(t, a, "GET", "/api/servers/production-01/recent-logs", "")
+	var page struct {
+		Items []logEntry `json:"items"`
+		Total *int       `json:"total"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if len(page.Items) != 100 || page.Items[0].ID != "recent-104" || page.Items[99].ID != "recent-5" || page.Total != nil {
+		t.Fatalf("unexpected recent log page: %+v", page)
+	}
+	if w := request(t, a, "GET", "/api/servers/missing/recent-logs", ""); w.Code != 404 {
+		t.Fatal("unknown server accepted", w.Code)
+	}
+	r := httptest.NewRequest("GET", "http://127.0.0.1:8080/api/servers/production-01/recent-logs", nil)
+	unauthenticated := httptest.NewRecorder()
+	a.handler().ServeHTTP(unauthenticated, r)
+	if unauthenticated.Code != 401 {
+		t.Fatal("recent logs exposed without authentication", unauthenticated.Code)
+	}
+}
 
 func TestCollectionRetriesOfflineEventAfterStorageTimeout(t *testing.T) {
 	a, err := newTestApp(t, t.TempDir())

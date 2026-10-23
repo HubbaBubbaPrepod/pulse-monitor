@@ -206,6 +206,11 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 401, "Invalid agent credentials")
 		return
 	}
+	if !a.allowReport(id, time.Now()) {
+		w.Header().Set("Retry-After", "1")
+		apiError(w, 429, "Agent reporting too frequently; retry after one second")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 2*1024*1024)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
@@ -279,6 +284,11 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	a.eventMu.Lock()
 	if err := a.storage.commitReport(r.Context(), id, &n, saveSample, logs, events); err != nil {
 		a.eventMu.Unlock()
+		if errors.Is(err, errStorageLow) {
+			w.Header().Set("Retry-After", "60")
+			apiError(w, 503, "Monitor storage is low; free disk space before retrying")
+			return
+		}
 		apiError(w, 500, "Could not save report")
 		return
 	}

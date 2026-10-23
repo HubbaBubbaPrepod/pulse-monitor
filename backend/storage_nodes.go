@@ -64,6 +64,9 @@ func (s *sqliteStore) loadNodes(ctx context.Context, servers []server) (map[stri
 	return out, nil
 }
 func (s *sqliteStore) commitReport(ctx context.Context, id string, n *agentNode, saveSample bool, logs []logEntry, events []monitorEvent) error {
+	if err := s.ensureReportSpace(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tx, err := s.writer.BeginTx(ctx, nil)

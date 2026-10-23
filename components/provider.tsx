@@ -294,10 +294,9 @@ export function Provider({ children }: { children: ReactNode }) {
       if (!serverId) return;
       if (backend === 'connected') {
         try {
-          const page = await api<LogPage>(
-            `/servers/${encodeURIComponent(serverId)}/logs?limit=100`,
-            { signal: controller.signal },
-          );
+          const page = await api<LogPage>(`/servers/${encodeURIComponent(serverId)}/recent-logs`, {
+            signal: controller.signal,
+          });
           if (!cancelled)
             setRecentLogs((current) =>
               mergeLogs(

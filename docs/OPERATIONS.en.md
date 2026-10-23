@@ -4,11 +4,11 @@
 
 ## Data and backups
 
-All paths are relative to `-data`. `account.json` contains the owner and bcrypt hash; `servers.json` the registry; `preferences.json` theme and language. `agents/*.json` contains token hashes and latest reports; `agents/*.jsonl` metric history; `logs.jsonl` the log archive; `events.json` events and markers. `modules`, `module-config`, and `module-data` contain module packages, settings, and results. Password fields remain in server configuration; hiding an input does not encrypt it or prevent owner access through the API.
+All paths are relative to `-data`. `account.json` contains the owner and bcrypt hash; `servers.json` the registry; `preferences.json` theme and language. `pulse.db` stores agent receipts, reports, metric samples, logs, events and retention policies in SQLite WAL mode. `pulse.db-wal` and `pulse.db-shm` are live SQLite files: never delete or copy them independently while Monitor is running. Legacy JSONL/JSON archives are migration inputs, not the active archive. Module packages, settings, results and state remain in their respective private directories. Password fields are stored in private configuration, not encrypted storage.
 
 Stop the dashboard, copy the **entire data directory** to a protected location, then restart. Back up TLS keys, service configuration, and protected token files on nodes separately. To restore, stop the service and replace the complete data directory with its original permissions. Signing out revokes the session and does not delete data. Sessions live in memory: sign in again after a restart.
 
-Metrics are written every 10 seconds; charts read the last 24 hours. JSONL archives are not automatically pruned; monitor free disk space. System logs are collected from agent startup; crash recovery depends on retention of the OS logs.
+Metrics are written every 10 seconds; charts read the last 24 hours. Log retention is configured per server; zero disables expiry. Cleanup runs in bounded batches each minute. History reads have a five-second deadline and recent-log polling avoids archive counts. Passive WAL checkpoints report a backlog over 64 MiB; journal reuse is limited to 16 MiB after successful recycling, not a hard WAL quota. Telemetry ingestion returns 503 below 128 MiB free space without acknowledging the report. System logs are collected from agent startup; crash recovery depends on retention of the OS logs.
 
 ## Upgrades and removal
 
@@ -32,3 +32,9 @@ On Linux, stop and disable the unit (`sudo systemctl disable --now pulse-monitor
 | Module error / unsupported       | Architecture build, resource permissions, configuration, timeout, and JSON protocol            |
 
 Linux: `sudo journalctl -u pulse-monitor -f` / `pulse-agent`. Manual startup prints errors in the terminal. Do not publish tokens, TLS keys, private configuration, or unredacted logs in Issues.
+
+## Native modules and operation results
+
+Windows Job Objects and Linux process groups clean up ordinary descendants after module completion/cancellation. These are lifetime controls, not a security sandbox: trusted native code still has the host process identity and can access its files/network. A Docker socket grants host-control authority. Do not install untrusted native packages. Docker control now verifies the exact container state, configured healthchecks and a newer start timestamp for restart. The verification budget is 20 seconds; failure to establish readiness is `unknown`, not a reason to repeat a restart automatically. A running container without a Docker healthcheck does not prove application readiness.
+
+Windows installation requires NTFS. The scheduled task runs as Local Service; the executable/static tree is read-only to that identity and its data directory is writable. Preserve private ACLs for data, certificates and backups. The installer does not relocate an existing exFAT installation.
