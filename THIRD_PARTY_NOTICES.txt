@@ -1,0 +1,3 @@
+Pulse includes wazero v1.12.0 (github.com/tetratelabs/wazero), copyright 2020-2023 wazero authors, licensed under Apache-2.0. The unmodified license and notice are included in third_party/wazero/.
+
+Pulse source remains licensed under MIT. Other Go dependency license information is available from the module versions pinned in go.mod and go.sum.

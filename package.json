@@ -1,6 +1,6 @@
 {
   "name": "pulse-monitor",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "test": "node --experimental-strip-types --test scripts/module-version.test.mjs",

@@ -1,5 +1,7 @@
 # Pulse Monitor
 
+Isolated WASI modules are available with Monitor 0.7.0 / Agent 0.6.0. They receive only explicit scoped host-broker operations; native modules remain full trust. See the [WASI runtime contract](https://github.com/HubbaBubbaPrepod/pulse-monitor/blob/main/docs/MODULES-WASI.en.md).
+
 [Pulse website](https://pulse.hubba-cloud.ru/en/) · [Practical guides](https://pulse.hubba-cloud.ru/en/guides/)
 
 [Русский](README.md) · **English**
@@ -61,7 +63,7 @@ flowchart LR
 - NVIDIA through available `nvidia-smi`; some Windows metrics through CIM/GPU Engine. Availability depends on the driver and OS; full Intel/AMD telemetry is not guaranteed. Unavailable values display a dash.
 - Connections and addresses need no additional programs. Packet metadata requires separately installed TShark and capture privileges; Windows also needs Npcap. Packet contents are not retained and packets are not mapped to PIDs.
 - Russian/English UI, themes and custom palettes with JSON import/export; owner preferences persist on the server.
-- Experimental modules: JSON packages containing native collectors, settings, and views. Modules run arbitrary code with agent permissions and no sandbox. Upload only trusted packages.
+- Experimental modules: JSON packages containing native collectors, settings, and views. Native modules run arbitrary code with agent permissions and no sandbox. Upload only trusted packages.
 
 The Docker collector releases separately as [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker). Upload the v1.0.2 `docker-module.json` package in module settings, then enable it for the target node.
 

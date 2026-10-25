@@ -14,4 +14,8 @@ Agent issues belong in [Pulse Agent Security](https://github.com/HubbaBubbaPrepo
 
 ## Deployment boundaries
 
-Register the first owner on loopback in the service's data directory. Remote access requires trusted HTTPS. Keep tokens and private keys outside the static `out` directory; restrict filesystem permissions and protect backups. Modules run arbitrary native code with agent privileges and no sandbox. Password configuration fields are not encrypted storage. Docker socket access can grant control over the host. See [installation](docs/INSTALL.en.md), [modules](docs/MODULES.en.md), and [operations](docs/OPERATIONS.en.md).
+Register the first owner on loopback in the service's data directory. Remote access requires trusted HTTPS. Keep tokens and private keys outside the static `out` directory; restrict filesystem permissions and protect backups. Native modules run arbitrary code with agent privileges and no sandbox. Password configuration fields are not encrypted storage. Docker socket access can grant control over the host. See [installation](docs/INSTALL.en.md), [modules](docs/MODULES.en.md), and [operations](docs/OPERATIONS.en.md).
+
+## Isolated components
+
+WASI components use an embedded interpreter without host filesystem mounts, inherited secrets, raw network or native process access. Explicit broker grants authorize scoped Docker operations or configured notifications. The host runtime, broker and Docker daemon remain trusted; 128 MiB limits guest linear memory, not total host RSS. Native components remain full trust. See [the WASI contract](https://github.com/HubbaBubbaPrepod/pulse-monitor/blob/main/docs/MODULES-WASI.en.md).

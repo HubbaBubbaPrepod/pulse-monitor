@@ -1,8 +1,10 @@
 [Русский](MODULES-V2.md) · **English**
 
-# Native modules v2
+# Component modules v2
 
-Status: development branch, not a published compatibility release. v1 modules remain unchanged. V2 supports short native invocations on Agent or Monitor, private configuration/state, interval scheduling and authenticated manual requests. Event dispatch, sustained alerts, delivery retries, custom HTML/JS and long-running jobs are not implemented by this slice.
+Monitor 0.7.0 / Agent 0.6.0 also support isolated WASI components with a capability broker. See the [runtime contract](MODULES-WASI.en.md). Native behavior described below remains a full-trust compatibility mode.
+
+Native protocol-2 support is available in Monitor 0.6.x / Agent 0.5.x; isolated runtime support starts at Monitor 0.7.0 / Agent 0.6.0. v1 modules remain unchanged. V2 supports short native invocations on Agent or Monitor, private configuration/state, interval scheduling and authenticated manual requests. Event dispatch, sustained alerts, delivery retries, custom HTML/JS and long-running jobs are not implemented by this slice.
 
 ## Installation and trust
 
@@ -10,7 +12,7 @@ Upload a complete schemaVersion/protocol 2 JSON through Modules → Install modu
 
 Native code has the OS privileges of its parent process. Grants gate host dispatch and state access; they are **not an OS sandbox**. `network.outbound` does not constrain a native program's destinations. Hashes establish integrity, not author trust. Review source before installation. A Docker socket may grant host-level control even with read-only dashboard grants.
 
-Component IDs must be unique ignoring case. Package IDs cannot alias another installed/retained directory by case. Versions are immutable: executable bytes and metadata cannot be replaced under the same version. Installing/reinstalling disables configurations and clears grants; re-authorize explicitly. To migrate a v1 ID, remove its active installation first; retained data does not automatically migrate.
+Component IDs must be unique ignoring case. Package IDs cannot alias another installed/retained directory by case. Versions are immutable: executable bytes and metadata cannot be replaced under the same version. Execution-contract changes disable configurations and clear grants; compatible updates preserve settings. Importing a v2 replacement retires the active v1 manifest under the same ID; retained data does not automatically migrate.
 
 ## Configuration API
 

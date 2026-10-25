@@ -1,6 +1,6 @@
 #requires -Version 7.4
 param(
- [string]$Version='v0.6.5',
+ [string]$Version='v0.7.0',
  [string]$GoExe='go',
  [string]$GoToolchain='go1.27.3',
  [switch]$SkipFrontend
@@ -32,7 +32,7 @@ try {
   Push-Location $moduleRoot
   try {& $goCommand build -trimpath -ldflags '-s -w' -o (Join-Path $targetDir ($name+$target.suffix)) .; if($LASTEXITCODE -ne 0){throw "$name build failed for $($target.os)/$($target.arch)"}}
   finally {Pop-Location}
-  foreach($item in @('LICENSE','deployment')){if(Test-Path (Join-Path $projectRoot $item)){Copy-Item -LiteralPath (Join-Path $projectRoot $item) -Destination $targetDir -Recurse -Force}}
+  foreach($item in @('LICENSE','THIRD_PARTY_NOTICES.txt','third_party','deployment')){if(Test-Path (Join-Path $projectRoot $item)){Copy-Item -LiteralPath (Join-Path $projectRoot $item) -Destination $targetDir -Recurse -Force}}
   Get-ChildItem -LiteralPath $projectRoot -File -Filter '*.md' | Where-Object { $_.Name -match '^(README|CHANGELOG|CONTRIBUTING|SECURITY|SUPPORT|CODE_OF_CONDUCT)(\.(en|ru))?\.md$' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $targetDir }
   $docs=Join-Path $projectRoot 'docs'
   if(Test-Path $docs){

@@ -2,6 +2,8 @@
 
 # Modules
 
+Monitor 0.7.0 / Agent 0.6.0 also support isolated WASI components with a capability broker. See the [runtime contract](MODULES-WASI.en.md). Native behavior described below remains a full-trust compatibility mode.
+
 ## Updating modules
 
 With Marketplace enabled, the installed-modules page checks publisher-bound updates while open (every five minutes) and offers an Update button. Preview releases require opting in. Every published version still needs moderation. Downloads are verified against the approved SHA-256. Installing JSON manually works with Marketplace disabled and makes no catalog requests.
@@ -88,7 +90,7 @@ The collector prints exactly one JSON object to stdout and exits with code 0, fo
 
 The separate [Pulse Module Docker](https://github.com/HubbaBubbaPrepod/pulse-module-docker) collects the Docker Engine version, containers, CPU/memory, network counters, and optionally recent logs from a selected container. It releases independently; package v1.0.2 uses module protocol v1.
 
-Download `docker-module.json` from the [module releases](https://github.com/HubbaBubbaPrepod/pulse-module-docker/releases), or build from the root of its clone with Go 1.23+ and PowerShell 7.4+:
+Download `docker-module.json` from the [module releases](https://github.com/HubbaBubbaPrepod/pulse-module-docker/releases), or build from the root of its clone with Go 1.25+ and PowerShell 7.4+:
 
 ```powershell
 ./scripts/build.ps1 -Version 1.0.2
