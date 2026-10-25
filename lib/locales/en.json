@@ -625,5 +625,12 @@
   "Показывать предварительные версии": "Include preview releases",
   "Обновлений в выбранном канале нет": "No updates in the selected channel",
   "Другие версии": "Other versions",
-  "Модуль обновлён. Если изменились права, включите компонент в настройках.": "Module updated. If permissions changed, enable the component in settings."
+  "Модуль обновлён. Если изменились права, включите компонент в настройках.": "Module updated. If permissions changed, enable the component in settings.",
+  "WASI: файлы, сеть и процессы хоста недоступны напрямую. Посредник выполняет только разрешённые операции в выбранной области.": "WASI: host files, network and processes are not directly accessible. The broker performs only granted operations within the selected scope.",
+  "Изолированный компонент WASI. Проверьте автора и разрешения: одобрение каталога не гарантирует безопасность.": "Isolated WASI component. Review the publisher and grants: catalog approval does not guarantee safety.",
+  "docker.read": "Read the local Docker container snapshot",
+  "docker.logs": "Read logs of the selected container",
+  "docker.control": "Start, restart or stop the selected container",
+  "telemetry.read": "Read telemetry of the configured node",
+  "notifications.telegram": "Send Telegram messages to the configured chat"
 }

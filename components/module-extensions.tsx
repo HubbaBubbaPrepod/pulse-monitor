@@ -24,6 +24,11 @@ const capabilities = [
   'events.receive',
   'network.outbound',
   'actions.execute',
+  'docker.read',
+  'docker.logs',
+  'docker.control',
+  'telemetry.read',
+  'notifications.telegram',
 ];
 function defaultConfig(component: ExtensionComponent): ExtensionConfiguration {
   return {
@@ -165,13 +170,16 @@ function ConfigurationFields({
           <h3>{tr('Разрешения компонента')}</h3>
           <p className="muted">
             {tr(
-              'Разрешения действуют только для выбранного компонента и узла. Нативный код не изолирован от операционной системы.',
+              component.runtime === 'wasip1'
+                ? 'WASI: файлы, сеть и процессы хоста недоступны напрямую. Посредник выполняет только разрешённые операции в выбранной области.'
+                : 'Разрешения действуют только для выбранного компонента и узла. Нативный код не изолирован от операционной системы.',
             )}
           </p>
           {capabilities
             .filter(
               (cap) =>
                 component.requires.includes(cap) ||
+                (component.optionalCapabilities ?? []).includes(cap) ||
                 (cap === 'actions.execute' && component.triggers.some((t) => t.mutating)),
             )
             .map((cap) => (
@@ -230,7 +238,9 @@ export function ConfigureExtension({
       <div className="drawer-body">
         <p className="form-note">
           {tr(
-            'Этот модуль запускает нативный код. Устанавливайте только модули авторов, которым доверяете.',
+            component.runtime === 'wasip1'
+              ? 'Изолированный компонент WASI. Проверьте автора и разрешения: одобрение каталога не гарантирует безопасность.'
+              : 'Этот модуль запускает нативный код. Устанавливайте только модули авторов, которым доверяете.',
           )}
         </p>
         {module.permissions.map((p) => (
@@ -473,7 +483,8 @@ function ExtensionComponentView({
               disabled={
                 !config?.enabled ||
                 busy ||
-                (!!action.mutating && !config?.grants.includes('actions.execute'))
+                (!!action.mutating && !config?.grants.includes('actions.execute')) ||
+                (action.requires ?? []).some((cap) => !config?.grants.includes(cap))
               }
               onClick={() => {
                 const target = {

@@ -371,7 +371,16 @@ export function Modules() {
                       {trText(
                         m.schemaVersion === 1
                           ? Object.keys(m.binaries).join(', ')
-                          : m.components.map((c) => c.location + ': ' + c.id).join(', '),
+                          : m.components
+                              .map(
+                                (c) =>
+                                  c.location +
+                                  ': ' +
+                                  c.id +
+                                  ' · ' +
+                                  (c.runtime === 'wasip1' ? 'WASI' : 'native'),
+                              )
+                              .join(', '),
                       )}
                     </small>
                     <div className="button-row">

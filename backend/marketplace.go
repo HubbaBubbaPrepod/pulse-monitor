@@ -25,16 +25,17 @@ type marketplaceConfig struct {
 }
 
 type marketplaceModule struct {
-	Owner       string   `json:"owner"`
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Version     string   `json:"version"`
-	SHA256      string   `json:"sha256"`
-	Size        int64    `json:"size"`
-	Platforms   []string `json:"platforms"`
-	Permissions []string `json:"permissions"`
-	SourceURL   string   `json:"sourceUrl"`
+	ExecutionRuntimes []string `json:"executionRuntimes,omitempty"`
+	Owner             string   `json:"owner"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	Version           string   `json:"version"`
+	SHA256            string   `json:"sha256"`
+	Size              int64    `json:"size"`
+	Platforms         []string `json:"platforms"`
+	Permissions       []string `json:"permissions"`
+	SourceURL         string   `json:"sourceUrl"`
 }
 
 var marketplaceOwner = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
@@ -242,13 +243,14 @@ func (a *app) marketplaceCatalog(w http.ResponseWriter, r *http.Request) {
 			apiError(w, 400, "Invalid module identity")
 			return
 		}
-		path = "/api/v1/modules/" + query.Get("owner") + "/" + query.Get("id")
+		path = "/api/v1/modules/" + query.Get("owner") + "/" + query.Get("id") + "?runtime=all"
 	} else {
 		if len(query.Get("query")) > 256 || len(query.Get("cursor")) > 64 {
 			apiError(w, 400, "Invalid catalog query")
 			return
 		}
 		filters := url.Values{}
+		filters.Set("runtime", "all")
 		for _, key := range []string{"query", "platform", "cursor"} {
 			filters.Set(key, query.Get(key))
 		}
@@ -291,7 +293,7 @@ func (a *app) marketplaceInstall(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, "Could not set installation deadline")
 		return
 	}
-	path := "/api/v1/modules/" + input.Owner + "/" + input.ID + "/versions/" + input.Version
+	path := "/api/v1/modules/" + input.Owner + "/" + input.ID + "/versions/" + input.Version + "?runtime=all"
 	raw, err := marketplaceFetch(r.Context(), origin, path, 64*1024)
 	var metadata marketplaceModule
 	if err != nil || json.Unmarshal(raw, &metadata) != nil {

@@ -11,6 +11,7 @@ import { Empty, Modal, Panel, Skeleton } from './ui';
 
 type Connection = { enabled: boolean; url: string };
 export type PublishedModule = {
+  executionRuntimes?: ('native' | 'wasip1')[];
   owner: string;
   id: string;
   name: string;
@@ -561,7 +562,10 @@ export function Marketplace({
             <p className="form-note">
               <ShieldCheck size={16} />
               {tr(
-                'Модуль содержит исполняемый код. Одобрение каталога не гарантирует его безопасность. После установки включите его для нужного сервера отдельно.',
+                choice.executionRuntimes?.length &&
+                  choice.executionRuntimes.every((runtime) => runtime === 'wasip1')
+                  ? 'Изолированный компонент WASI. Проверьте автора и разрешения: одобрение каталога не гарантирует безопасность.'
+                  : 'Модуль содержит исполняемый код. Одобрение каталога не гарантирует его безопасность. После установки включите его для нужного сервера отдельно.',
               )}
             </p>
             <label className="marketplace-consent">

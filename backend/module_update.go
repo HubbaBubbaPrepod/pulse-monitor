@@ -106,7 +106,7 @@ func (a *app) marketplaceUpdates(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, 200, map[string]any{"enabled": false, "items": []any{}})
 				return
 			}
-			raw, err := marketplaceFetch(ctx, origin, "/api/v1/modules/"+source.Owner+"/"+active.ID, 1024*1024)
+			raw, err := marketplaceFetch(ctx, origin, "/api/v1/modules/"+source.Owner+"/"+active.ID+"?runtime=all", 1024*1024)
 			var result struct {
 				Versions []marketplaceModule `json:"versions"`
 			}

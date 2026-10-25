@@ -1,5 +1,6 @@
 import type { ModuleField, ModuleManifest } from './modules';
 export type ExtensionTrigger = {
+  requires?: string[];
   type: 'manual' | 'interval' | 'event';
   action?: string;
   label?: string;
@@ -16,6 +17,8 @@ export type ExtensionView = ModuleManifest['views'][number] & {
   actions?: string[];
 };
 export type ExtensionComponent = {
+  runtime?: 'native' | 'wasip1';
+  optionalCapabilities?: string[];
   id: string;
   location: 'agent' | 'monitor';
   protocol: 2;
@@ -97,6 +100,7 @@ export function actionAvailable(
     typeof row[rowKey] === 'string' &&
     String(row[rowKey]).length > 0 &&
     (!action.mutating || grants.includes('actions.execute')) &&
+    (action.requires ?? []).every((capability) => grants.includes(capability)) &&
     (!action.when || action.when.values.includes(String(row[action.when.key])))
   );
 }
