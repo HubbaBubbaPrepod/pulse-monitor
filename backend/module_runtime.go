@@ -57,7 +57,12 @@ func runModuleInvocation(ctx context.Context, path string, input moduleInvocatio
 	if err := runModuleCommand(cmd); err != nil {
 		return result, errors.New("Component failed or timed out; outcome may be unknown")
 	}
-	d := json.NewDecoder(bytes.NewReader(output.Bytes()))
+	return decodeModuleInvocationResult(output.Bytes())
+}
+
+func decodeModuleInvocationResult(output []byte) (moduleInvocationResult, error) {
+	var result moduleInvocationResult
+	d := json.NewDecoder(bytes.NewReader(output))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&result); err != nil {
 		return result, errors.New("Invalid component response")

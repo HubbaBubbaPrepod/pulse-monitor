@@ -109,3 +109,12 @@ func TestBrokerTelegramAmbiguousResponseIsUnknownAndNotReplayed(t *testing.T) {
 		t.Fatal("ambiguous delivery was repeated")
 	}
 }
+
+func TestBrokerFinalizationKeepsBoundedTrustedProof(t *testing.T) {
+	b := &monitorModuleBroker{sent: true, deliveryStatus: "ok", deliveryProof: map[string]any{"deliveryVerified": true}}
+	data, _ := json.Marshal(map[string]string{"padding": strings.Repeat("x", 512*1024-20)})
+	out, err := b.Finalize(moduleInvocationResult{Protocol: 2, Status: "ok", Data: data}, nil)
+	if err != nil || out.Status != "unknown" || len(out.Data)+len(out.State) > 512*1024 || !strings.Contains(string(out.Data), "deliveryVerified") {
+		t.Fatal("merged result lost bounded trusted proof", out.Status, err)
+	}
+}

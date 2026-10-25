@@ -143,5 +143,9 @@ func (b *monitorModuleBroker) Finalize(result moduleInvocationResult, runErr err
 		data[key] = value
 	}
 	result.Data, runErr = json.Marshal(data)
+	if runErr != nil || len(result.Data)+len(result.State) > modulewasm.MaxOutputBytes {
+		proof, _ := json.Marshal(b.deliveryProof)
+		return moduleInvocationResult{Protocol: 2, Status: "unknown", Data: proof, Error: "Host delivery completed but guest result exceeded limits; it was not replayed"}, nil
+	}
 	return result, runErr
 }

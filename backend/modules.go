@@ -110,8 +110,8 @@ func normalizeModule(m *moduleManifest) {
 	}
 }
 
-func validateModule(m moduleManifest, content bool) error {
-	if m.SchemaVersion != 1 || m.Protocol != 1 || !validID.MatchString(m.ID) || !moduleVersion.MatchString(m.Version) || len(m.Version) > 48 || len(m.Name) == 0 || len(m.Name) > 64 || len(m.Author) > 128 || len(m.Description) > 2048 || len(m.Fields) > 32 || len(m.Views) > 16 || len(m.Binaries) == 0 || len(m.Binaries) > 3 || len(m.Permissions) > 16 {
+func validateModuleMetadata(m moduleManifest) error {
+	if m.SchemaVersion != 1 || m.Protocol != 1 || !validID.MatchString(m.ID) || !moduleVersion.MatchString(m.Version) || len(m.Version) > 48 || len(m.Name) == 0 || len(m.Name) > 64 || len(m.Author) > 128 || len(m.Description) > 2048 || len(m.Fields) > 32 || len(m.Views) > 16 || len(m.Permissions) > 16 {
 		return errors.New("Invalid module manifest or protocol")
 	}
 	for _, permission := range m.Permissions {
@@ -135,6 +135,16 @@ func validateModule(m moduleManifest, content bool) error {
 				return errors.New("Invalid column")
 			}
 		}
+	}
+	return nil
+}
+
+func validateModule(m moduleManifest, content bool) error {
+	if err := validateModuleMetadata(m); err != nil {
+		return err
+	}
+	if len(m.Binaries) == 0 || len(m.Binaries) > 3 {
+		return errors.New("Invalid module platforms")
 	}
 	total := 0
 	for target, b := range m.Binaries {

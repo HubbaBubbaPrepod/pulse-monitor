@@ -27,14 +27,16 @@ type modulePackageV2 struct {
 	Components    []moduleComponentV2 `json:"components"`
 }
 type moduleComponentV2 struct {
-	ID       string                  `json:"id"`
-	Location string                  `json:"location"`
-	Protocol int                     `json:"protocol"`
-	Requires []string                `json:"requires"`
-	Fields   []moduleField           `json:"fields"`
-	Triggers []moduleTriggerV2       `json:"triggers"`
-	Binaries map[string]moduleBinary `json:"binaries"`
-	Views    []moduleViewV2          `json:"views,omitempty"`
+	Runtime              string                  `json:"runtime,omitempty"`
+	OptionalCapabilities []string                `json:"optionalCapabilities,omitempty"`
+	ID                   string                  `json:"id"`
+	Location             string                  `json:"location"`
+	Protocol             int                     `json:"protocol"`
+	Requires             []string                `json:"requires"`
+	Fields               []moduleField           `json:"fields"`
+	Triggers             []moduleTriggerV2       `json:"triggers"`
+	Binaries             map[string]moduleBinary `json:"binaries"`
+	Views                []moduleViewV2          `json:"views,omitempty"`
 }
 type moduleViewV2 struct {
 	moduleView
@@ -46,6 +48,7 @@ type moduleRowCondition struct {
 	Values []string `json:"values"`
 }
 type moduleTriggerV2 struct {
+	Requires    []string            `json:"requires,omitempty"`
 	When        *moduleRowCondition `json:"when,omitempty"`
 	Type        string              `json:"type"`
 	Seconds     *int                `json:"seconds,omitempty"`
@@ -95,7 +98,7 @@ func uniqueJSONValue(d *json.Decoder, depth int, member ...string) error {
 			}
 			var ok bool
 			name, ok = key.(string)
-			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64 views rowKey actions kind title columns unit mutating inputFields inputKey resultView when values")
+			allowed := strings.Fields("schemaVersion protocol id version name author description permissions components location runtime optionalCapabilities requires fields triggers binaries key label type required default seconds events action sha256 content linux-amd64 linux-arm64 windows-amd64 wasip1-wasm views rowKey actions kind title columns unit mutating inputFields inputKey resultView when values")
 			if !ok || seen[name] || !slices.Contains(allowed, name) {
 				return errors.New("Duplicate JSON member")
 			}
@@ -170,7 +173,7 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 			add(path+".id", "invalid_component_id")
 		}
 		seen[strings.ToLower(c.ID)] = true
-		if !slices.Contains([]string{"agent", "monitor"}, c.Location) || c.Protocol != 2 {
+		if !slices.Contains([]string{"agent", "monitor"}, c.Location) || c.Protocol != 2 || !slices.Contains([]string{"", "native", "wasip1"}, c.Runtime) {
 			add(path, "invalid_runtime")
 		}
 		if !validModuleNames(c.Requires, 32) {
@@ -181,13 +184,28 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 		for _, v := range c.Views {
 			legacy.Views = append(legacy.Views, v.moduleView)
 		}
-		if validateModule(legacy, content) != nil {
+		var artifactErr error
+		if c.Runtime == "wasip1" {
+			artifactErr = validateModuleMetadata(legacy)
+			if artifactErr == nil {
+				artifactErr = validateWASIArtifacts(c.Binaries, content)
+			}
+		} else {
+			artifactErr = validateModule(legacy, content)
+		}
+		if artifactErr != nil {
 			add(path, "invalid_component_artifacts_or_fields")
+		}
+		if !validWASICapabilities(c) {
+			add(path, "invalid_runtime_capabilities")
 		}
 		for _, b := range c.Binaries {
 			total += len(b.Content)
 		}
 		for _, f := range c.Fields {
+			if c.Runtime == "wasip1" && !validWASIHostField(c.Location, f) {
+				add(path+".fields", "invalid_reserved_host_field")
+			}
 			if f.Default == nil {
 				continue
 			}
@@ -216,6 +234,17 @@ func validateModulePackageV2Content(p modulePackageV2, content bool) []moduleVal
 		}
 		for j, t := range c.Triggers {
 			valid := false
+			if len(t.Requires) > 0 && (c.Runtime != "wasip1" || t.Type != "manual" || !validModuleNames(t.Requires, 32)) {
+				add(path+".triggers", "invalid_action_capabilities")
+			}
+			for _, required := range t.Requires {
+				if !slices.Contains(c.Requires, required) && !slices.Contains(c.OptionalCapabilities, required) {
+					add(path+".triggers", "undeclared_action_capability")
+				}
+			}
+			if c.Runtime == "wasip1" && t.Mutating && !slices.Contains(c.Requires, "actions.execute") && !slices.Contains(c.OptionalCapabilities, "actions.execute") {
+				add(path+".triggers", "undeclared_mutation_capability")
+			}
 			switch t.Type {
 			case "interval":
 				valid = t.Seconds != nil && *t.Seconds >= 5 && *t.Seconds <= 86400 && t.Action == nil && t.Events == nil

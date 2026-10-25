@@ -101,3 +101,19 @@ func Reply(status string, data any, message string) json.RawMessage {
 	}
 	return raw
 }
+
+// PublicFields copies invocation values while withholding both classified
+// secrets and reserved broker settings, independent of a module's field types.
+func PublicFields(values map[string]any, secrets []string) map[string]any {
+	hidden := map[string]bool{"telegramToken": true, "telegramChatId": true, "serverId": true, "socket": true}
+	for _, key := range secrets {
+		hidden[key] = true
+	}
+	public := map[string]any{}
+	for key, value := range values {
+		if !hidden[key] {
+			public[key] = value
+		}
+	}
+	return public
+}

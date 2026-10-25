@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var moduleHostCapabilities = []string{"state.read", "state.write", "network.outbound", "actions.execute"}
+var moduleHostCapabilities = []string{"state.read", "state.write", "network.outbound", "actions.execute", "docker.read", "docker.logs", "docker.control", "telemetry.read", "notifications.telegram"}
 
 type moduleConfiguration struct {
 	SecretKeys   []string       `json:"secretKeys,omitempty"`
@@ -48,6 +48,9 @@ func readModuleJSON(path string, into any) error {
 	return json.Unmarshal(raw, into)
 }
 func moduleArtifactFilename(platform string) string {
+	if platform == "wasip1-wasm" {
+		return platform + ".wasm"
+	}
 	if strings.HasPrefix(platform, "windows-") {
 		return platform + ".exe"
 	}
@@ -421,7 +424,7 @@ func (a *app) extensionRoutes(mux *http.ServeMux) {
 				return
 			}
 			for _, grant := range next.Grants {
-				if !slices.Contains(moduleHostCapabilities, grant) {
+				if !slices.Contains(moduleHostCapabilities, grant) || !declaredModuleGrant(c, grant) {
 					apiError(w, 403, "Unsupported capability grant")
 					return
 				}

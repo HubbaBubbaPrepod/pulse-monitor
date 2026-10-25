@@ -205,9 +205,9 @@ func (a *app) migrateExtensionConfigurations(previous, next modulePackageV2) (fu
 	}
 	for _, component := range next.Components {
 		old, exists := extensionComponent(previous, component.ID)
-		compatible := exists && old.Location == component.Location && old.Protocol == component.Protocol
-		before, _ := json.Marshal([]any{old.Requires, old.Fields, old.Triggers, previous.Permissions})
-		after, _ := json.Marshal([]any{component.Requires, component.Fields, component.Triggers, next.Permissions})
+		compatible := exists && old.Location == component.Location && old.Protocol == component.Protocol && componentRuntime(old) == componentRuntime(component)
+		before, _ := json.Marshal([]any{old.Requires, old.OptionalCapabilities, old.Fields, old.Triggers, previous.Permissions})
+		after, _ := json.Marshal([]any{component.Requires, component.OptionalCapabilities, component.Fields, component.Triggers, next.Permissions})
 		compatible = compatible && bytes.Equal(before, after)
 		root := filepath.Join(a.dir, "extension-config", next.ID, component.ID)
 		files, err := os.ReadDir(root)

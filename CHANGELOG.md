@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Add opt-in `wasip1` components with a bounded WASI interpreter, explicit capability brokers, runtime negotiation and isolated state; keep omitted runtime compatible with native modules.
+- Withhold reserved host settings and password fields from guests; require renewed consent after runtime or capability contract changes.
+
 - Bound log history reads and observe passive WAL checkpoint progress; poll recent logs without archive counts.
 - Terminate native module process groups / Windows Jobs after cancellation and completion.
 - Protect HTML/API responses, use trusted proxy client identities, and rate-limit each enrolled node.

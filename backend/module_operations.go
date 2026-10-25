@@ -18,6 +18,7 @@ import (
 )
 
 type moduleOperation struct {
+	Runtime             string          `json:"runtime,omitempty"`
 	ID                  string          `json:"id"`
 	ModuleID            string          `json:"moduleId"`
 	ComponentID         string          `json:"componentId"`
@@ -167,7 +168,7 @@ func (a *app) authorizedOperation(op moduleOperation) (modulePackageV2, moduleCo
 		return p, moduleComponentV2{}, moduleConfiguration{}, err
 	}
 	c, ok := extensionComponent(p, op.ComponentID)
-	if !ok || p.Version != op.Version || c.Location != op.Location || !validModuleScope(a, c, op.ServerID) {
+	if !ok || p.Version != op.Version || c.Location != op.Location || !validModuleScope(a, c, op.ServerID) || componentRuntime(c) != componentRuntime(moduleComponentV2{Runtime: op.Runtime}) {
 		return p, c, moduleConfiguration{}, errors.New("Component changed")
 	}
 	cfg, err := a.extensionConfiguration(p.ID, c.ID, op.ServerID)
@@ -185,10 +186,20 @@ func (a *app) authorizedOperation(op moduleOperation) (modulePackageV2, moduleCo
 	if op.Mutating && !slices.Contains(cfg.Grants, "actions.execute") {
 		return p, c, cfg, errors.New("Action execution is not granted")
 	}
+	if trigger, ok := manualModuleTrigger(c, op.Action); ok && op.Trigger == "manual" {
+		for _, required := range trigger.Requires {
+			if !slices.Contains(cfg.Grants, required) || !declaredModuleGrant(c, required) {
+				return p, c, cfg, errors.New("Action capability not granted")
+			}
+		}
+	}
 	return p, c, cfg, nil
 }
 func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, server, trigger, action string, input map[string]any, event json.RawMessage, scheduleKey ...string) (moduleOperation, int, error) {
 	op := moduleOperation{ModuleID: p.ID, ComponentID: c.ID, Version: p.Version, ServerID: server, Location: c.Location, Trigger: trigger, Action: action, Input: input, Event: event, Status: "pending", CreatedAt: time.Now().UTC()}
+	if c.Runtime == "wasip1" {
+		op.Runtime = "wasip1"
+	}
 	op.ExpiresAt = op.CreatedAt.Add(time.Minute)
 	if trigger == "manual" {
 		a.auth.mu.Lock()
@@ -231,6 +242,9 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 		a.telemetryMu.RLock()
 		node := a.nodes[server]
 		ready := node != nil && !node.Seen.IsZero() && time.Since(node.Seen) < 15*time.Second && node.Report.Capabilities["moduleRuntime"] == "2"
+		if ready && c.Runtime == "wasip1" {
+			ready = node.Report.Capabilities["moduleWASI"] == "1"
+		}
 		a.telemetryMu.RUnlock()
 		if !ready {
 			return op, 409, errors.New("Agent offline or module runtime v2 update required")
@@ -286,6 +300,7 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 }
 
 type moduleLease struct {
+	Runtime           string           `json:"runtime,omitempty"`
 	ID                string           `json:"id"`
 	ModuleID          string           `json:"moduleId"`
 	ComponentID       string           `json:"componentId"`
@@ -303,6 +318,18 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 	p, c, cfg, err := a.authorizedOperation(op)
 	if err != nil {
 		return lease, err
+	}
+	if c.Runtime == "wasip1" {
+		if c.Location == "agent" {
+			a.telemetryMu.RLock()
+			node := a.nodes[op.ServerID]
+			supported := node != nil && node.Report.Capabilities["moduleWASI"] == "1"
+			a.telemetryMu.RUnlock()
+			if !supported {
+				return lease, errors.New("WASI Agent update required")
+			}
+		}
+		target = "wasip1-wasm"
 	}
 	binary, ok := c.Binaries[target]
 	if !ok {
@@ -345,8 +372,11 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 		input = map[string]any{}
 	}
 	lease = moduleLease{ID: op.ID, ModuleID: p.ID, ComponentID: c.ID, Version: p.Version, SHA256: binary.SHA256, Mutating: op.Mutating, Invocation: moduleInvocation{Protocol: 2, ID: op.ID, ServerID: op.ServerID, Trigger: op.Trigger, Action: op.Action, Config: cfg.Config, Input: input, State: state, Grants: cfg.Grants, Event: op.Event}}
+	if c.Runtime == "wasip1" {
+		lease.Runtime = "wasip1"
+	}
 	lease.ExpiresAt = op.ExpiresAt
-	lease.SecretFields = []string{}
+	lease.SecretFields = append([]string{}, cfg.SecretKeys...)
 	lease.SecretInputFields = []string{}
 	for _, field := range c.Fields {
 		if field.Type == "password" {
@@ -363,7 +393,11 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 	return lease, nil
 }
 func (a *app) componentStatePath(op moduleOperation) string {
-	return filepath.Join(a.dir, "extension-state", op.ModuleID, op.ComponentID, moduleScopeKey(op.ServerID)+".json")
+	scope := moduleScopeKey(op.ServerID)
+	if op.Runtime == "wasip1" {
+		scope += "-wasip1"
+	}
+	return filepath.Join(a.dir, "extension-state", op.ModuleID, op.ComponentID, scope+".json")
 }
 func (a *app) finishModuleOperation(op moduleOperation, out moduleInvocationResult, runErr error) error {
 	op.FinishedAt = time.Now().UTC()
@@ -648,7 +682,7 @@ func (a *app) runModuleRuntime(ctx context.Context) error {
 		a.extensionMu.Unlock()
 		// Queue errors prevent dispatch; authenticated API calls expose storage errors.
 		if lease.ID != "" {
-			path := filepath.Join(a.dir, "extensions", lease.ModuleID, lease.Version, lease.ComponentID, moduleArtifactFilename(runtime.GOOS+"-"+runtime.GOARCH))
+			path := filepath.Join(a.dir, "extensions", lease.ModuleID, lease.Version, lease.ComponentID, moduleArtifactFilename(selected.Platform))
 			data, readErr := os.ReadFile(path)
 			sum := sha256.Sum256(data)
 			var result moduleInvocationResult
@@ -668,10 +702,14 @@ func (a *app) runModuleRuntime(ctx context.Context) error {
 				runErr = errors.New("Artifact digest changed")
 			}
 			if runErr == nil {
-				runErr = os.Chmod(path, 0700)
+				mode := os.FileMode(0700)
+				if lease.Runtime == "wasip1" {
+					mode = 0600
+				}
+				runErr = os.Chmod(path, mode)
 			}
 			if runErr == nil {
-				result, runErr = runModuleInvocation(child, path, lease.Invocation)
+				result, runErr = a.runModuleLease(child, path, lease)
 			}
 			cancel()
 			a.extensionMu.Lock()
