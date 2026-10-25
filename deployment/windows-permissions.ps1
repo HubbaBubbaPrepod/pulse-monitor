@@ -6,6 +6,9 @@ function Assert-PulsePrivateTree {
  $allowed=@('S-1-5-18','S-1-5-32-544')
  if($AllowLocalService){$allowed+='S-1-5-19'}
  $owners=@('S-1-5-18','S-1-5-32-544',[Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+ # The service legitimately owns database/WAL/log files it creates. Its
+ # ownership does not grant it more access than the explicitly trusted SID.
+ if($AllowLocalService){$owners+='S-1-5-19'}
  $pending=[Collections.Generic.Stack[string]]::new()
  $pending.Push([IO.Path]::GetFullPath($Path))
  while($pending.Count -gt 0){

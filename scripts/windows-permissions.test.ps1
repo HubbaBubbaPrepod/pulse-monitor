@@ -29,6 +29,12 @@ try {
  try {Assert-PulsePrivateTree -Path $testDirectory -AllowLocalService} catch {$refused=$true}
  if(-not $refused){throw 'An unsafe existing executable was accepted for privileged upgrade'}
  Write-Output 'PASS: unsafe existing executable is refused before an upgrade'
+ $serviceFile=Join-Path $testDirectory 'pulse.db-wal'
+ [IO.File]::WriteAllText($serviceFile,'fixture')
+ & (Join-Path $env:SystemRoot 'System32/icacls.exe') $serviceFile /setowner '*S-1-5-19' | Out-Null
+ if($LASTEXITCODE -ne 0){throw 'Service owner fixture setup failed'}
+ Assert-PulsePrivateTree -Path $serviceFile -AllowLocalService
+ Write-Output 'PASS: private files created by Local Service remain upgradeable'
 } finally {
  Set-Acl -LiteralPath $testDirectory -AclObject $originalAcl
  $resolved=[IO.Path]::GetFullPath($testDirectory)
