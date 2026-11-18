@@ -60,7 +60,7 @@ flowchart LR
 ## Features and limits
 
 - Live metrics and charts, sortable/searchable processes, disks, filtered logs with CSV export, connection and load events.
-- NVIDIA through available `nvidia-smi`; some Windows metrics through CIM/GPU Engine. Availability depends on the driver and OS; full Intel/AMD telemetry is not guaranteed. Unavailable values display a dash.
+- NVIDIA, AMD and Intel GPU telemetry through the agent: `nvidia-smi`, Linux DRM/sysfs and Windows DXGI/PDH. Sensors depend on the driver and hardware; unavailable values display a dash. [GPU details](https://github.com/HubbaBubbaPrepod/pulse-agent/blob/main/GPU.md).
 - Connections and addresses need no additional programs. Packet metadata requires separately installed TShark and capture privileges; Windows also needs Npcap. Packet contents are not retained and packets are not mapped to PIDs.
 - Russian/English UI, themes and custom palettes with JSON import/export; owner preferences persist on the server.
 - Experimental modules: JSON packages containing native collectors, settings, and views. Native modules run arbitrary code with agent permissions and no sandbox. Upload only trusted packages.

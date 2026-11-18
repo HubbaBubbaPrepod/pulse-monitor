@@ -169,7 +169,8 @@ func validateReport(v agentReport) error {
 		}
 	}
 	for _, g := range v.GPUs {
-		if g.Utilization < 0 || g.Utilization > 100 || g.MemoryUsed < 0 || g.MemoryTotal < g.MemoryUsed || len(g.History) > 61 || len(g.Name) > 256 {
+		totalSupported, hasTotalFlag := g.Supported["memoryTotal"]
+		if g.Utilization < 0 || g.Utilization > 100 || g.MemoryUsed < 0 || g.MemoryTotal < 0 || ((!hasTotalFlag || totalSupported) && g.MemoryTotal < g.MemoryUsed) || len(g.History) > 61 || len(g.Name) > 256 {
 			return errors.New("invalid GPU")
 		}
 	}

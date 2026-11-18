@@ -2,6 +2,12 @@
 
 # Changelog
 
+## [0.7.1] — 2026-11-18
+
+- Update Next.js to 16.4.6 and the TypeScript ESLint dependency chain to fix known security advisories; keep npm locks portable across Windows and Linux.
+
+- Accept GPU usage with explicitly unavailable VRAM capacity, including Intel integrated adapters, while retaining negative-value and legacy capacity checks. Update GPU documentation for the expanded Linux/Windows agent collectors.
+
 ## [0.7.0] — 2026-10-25
 
 - Add opt-in `wasip1` components with a bounded WASI interpreter, explicit capability brokers, runtime negotiation and isolated state; keep omitted runtime compatible with native modules.

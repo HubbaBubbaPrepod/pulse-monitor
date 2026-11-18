@@ -21,6 +21,53 @@ func reportRequest(a *app, id, token, body string) *httptest.ResponseRecorder {
 	return w
 }
 
+func TestAgentPartialGPUMetricsReachSnapshot(t *testing.T) {
+	t.Parallel()
+	a, err := newTestApp(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, csrf := testSession(t, a)
+	w := rawAuthRequest(a, "POST", "/api/servers/production-01/token", "{}", cookie, csrf)
+	if w.Code != 201 {
+		t.Fatalf("token: %d", w.Code)
+	}
+	var issued struct{ Token string }
+	if err := json.Unmarshal(w.Body.Bytes(), &issued); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"bootId":"gpu-test","sequence":1,"os":"Windows 11","sample":{"cpu":1,"memory":20},"gpus":[{"id":"luid:intel","name":"Intel GPU","memoryUsed":0.75,"memoryTotal":0,"supported":{"memoryUsed":true,"memoryTotal":false,"utilization":false},"history":[]},{"id":"pci:0000:03:00.0","name":"AMD GPU","utilization":25,"memoryUsed":2,"memoryTotal":8,"supported":{"memoryUsed":true,"memoryTotal":true,"utilization":true,"temperature":false},"history":[25]}]}`
+	if w := reportRequest(a, "production-01", issued.Token, body); w.Code != 200 {
+		t.Fatalf("partial GPU report: %d %s", w.Code, w.Body.String())
+	}
+	server, _ := a.findServer("production-01")
+	snapshot := a.snapshot(server, 60)
+	if len(snapshot.GPUs) != 2 || snapshot.GPUs[0].MemoryUsed != 0.75 || snapshot.GPUs[0].Supported["memoryTotal"] || snapshot.GPUs[1].Utilization != 25 {
+		t.Fatalf("GPU flags lost: %+v", snapshot.GPUs)
+	}
+}
+
+func TestGPUCapacityValidationKeepsLegacyChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		total, used float64
+		supported   map[string]bool
+		valid       bool
+	}{
+		{"legacy valid", 8, 2, nil, true},
+		{"legacy over capacity", 8, 9, nil, false},
+		{"negative unknown capacity", -1, 0, map[string]bool{"memoryTotal": false}, false},
+		{"unknown capacity", 0, 2, map[string]bool{"memoryTotal": false}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := agentReport{BootID: "gpu-test", Sequence: 1, OS: "Linux", GPUs: []gpu{{Name: "GPU", MemoryTotal: tc.total, MemoryUsed: tc.used, Supported: tc.supported}}}
+			if err := validateReport(r); (err == nil) != tc.valid {
+				t.Fatalf("valid=%v error=%v", tc.valid, err)
+			}
+		})
+	}
+}
+
 func TestAgentLifecycleAndRestart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
