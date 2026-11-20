@@ -1,6 +1,6 @@
 #requires -Version 7.4
 param(
- [string]$Version='v0.7.1',
+ [string]$Version='v0.7.2',
  [string]$GoExe='go',
  [string]$GoToolchain='go1.27.3',
  [switch]$SkipFrontend

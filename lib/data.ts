@@ -14,6 +14,15 @@ export type Server = {
   threshold: number;
 };
 
+export type SampleField = 'cpu' | 'memory' | 'incoming' | 'outgoing' | 'read' | 'write';
+export type SampleSummary = {
+  count: number;
+  start: string;
+  end: string;
+  min: Record<SampleField, number>;
+  max: Record<SampleField, number>;
+  avg: Record<SampleField, number>;
+};
 export type Sample = {
   at?: string;
   cpu: number;
@@ -22,7 +31,31 @@ export type Sample = {
   outgoing: number;
   read: number;
   write: number;
+  summary?: SampleSummary;
 };
+
+export function sampleMetric(sample: Sample, field: SampleField) {
+  const summary = sample.summary;
+  const min = summary?.min?.[field],
+    max = summary?.max?.[field],
+    avg = summary?.avg?.[field];
+  if (
+    summary &&
+    Number.isSafeInteger(summary.count) &&
+    summary.count > 0 &&
+    typeof min === 'number' &&
+    Number.isFinite(min) &&
+    typeof max === 'number' &&
+    Number.isFinite(max) &&
+    typeof avg === 'number' &&
+    Number.isFinite(avg) &&
+    min <= avg &&
+    avg <= max
+  ) {
+    return { value: avg, min, max, count: summary.count };
+  }
+  return { value: sample[field], min: sample[field], max: sample[field], count: 1 };
+}
 export type Process = {
   pid: number;
   name: string;

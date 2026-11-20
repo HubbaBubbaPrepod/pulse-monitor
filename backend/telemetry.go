@@ -150,6 +150,9 @@ func (a *app) agentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/{id}/report", a.receiveReport)
 }
 func validateReport(v agentReport) error {
+	if v.Sample.Summary != nil {
+		return errors.New("sample summaries are computed by Monitor")
+	}
 	if !validID.MatchString(v.BootID) || v.Sequence == 0 || len(v.OS) == 0 || len(v.OS) > 80 || len(v.Processes) > 2048 || len(v.Disks) > 128 || len(v.GPUs) > 32 || len(v.Connections) > 4096 || len(v.Packets) > 256 || len(v.Logs) > 100 || len(v.Capabilities) > 16 {
 		return errors.New("invalid report identity or size")
 	}
@@ -268,9 +271,17 @@ func (a *app) receiveReport(w http.ResponseWriter, r *http.Request) {
 	n.Seen = now
 	n.Restored = false
 	n.History = slices.Clone(old.History)
-	saveSample := len(n.History) == 0 || sampleAge(n.History[len(n.History)-1], now) >= 10*time.Second
-	if saveSample {
-		n.History = append(n.History, report.Sample)
+	// Persist the evolving bucket atomically with every accepted report, so a
+	// restart does not discard spikes between the ten-second history rows.
+	saveSample := true
+	if len(n.History) == 0 || sampleAge(n.History[len(n.History)-1], now) >= 10*time.Second {
+		point := report.Sample
+		initial := summaryOf(point)
+		point.Summary = &initial
+		n.History = append(n.History, point)
+	} else {
+		last := len(n.History) - 1
+		n.History[last] = mergeSamples(n.History[last], report.Sample)
 	}
 	for len(n.History) > 0 && sampleAge(n.History[0], now) > 24*time.Hour {
 		n.History = n.History[1:]
@@ -358,19 +369,20 @@ func (a *app) agentSnapshot(s server, period int) (snapshot, bool) {
 	cut := time.Now().Add(-time.Duration(period) * time.Minute)
 	for _, v := range n.History {
 		stamp, _ := time.Parse(time.RFC3339Nano, v.At)
+		if v.Summary != nil {
+			if end, err := time.Parse(time.RFC3339Nano, v.Summary.End); err == nil && end.After(stamp) {
+				stamp = end
+			}
+		}
 		if !stamp.Before(cut) {
 			values = append(values, v)
 		}
 	}
+	out.Samples = reduceSamples(values, 60)
+	// The live point is an overlay, not another observation in the historical
+	// statistics. Never merge it into buckets that already contain that report.
 	if len(values) > 0 && values[len(values)-1].At != n.Report.Sample.At {
-		values = append(values, n.Report.Sample)
-	}
-	if len(values) > 61 {
-		for i := range 61 {
-			out.Samples = append(out.Samples, values[i*(len(values)-1)/60])
-		}
-	} else {
-		out.Samples = values
+		out.Samples = append(out.Samples, n.Report.Sample)
 	}
 	if n.Report.Processes != nil {
 		out.Processes = n.Report.Processes

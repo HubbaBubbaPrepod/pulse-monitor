@@ -2,6 +2,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/monitor';
 import {
+  operationRequest,
+  readOperationRequest,
+  clearOperationRequest,
+} from '@/lib/module-operation-request';
+import {
   type ExtensionPackage,
   type ExtensionComponent,
   type ExtensionConfiguration,
@@ -323,6 +328,65 @@ function ExtensionComponentView({
   const [revision, setRevision] = useState(0);
   const inflight = useRef(false);
   const controller = useRef<AbortController | null>(null);
+  const requestScope = componentEndpoint(module.id, component.id, scope, 'operations');
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed) return;
+      try {
+        setHasPendingRequest(!!readOperationRequest(sessionStorage, requestScope));
+      } catch {
+        setHasPendingRequest(true);
+        setError(tr('operation.requestStorageInvalid'));
+      }
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [requestScope]);
+  async function lookupRequest(key: string, signal?: AbortSignal) {
+    try {
+      return await api<ExtensionOperation>('/module-operation-request', {
+        headers: { 'Idempotency-Key': key },
+        signal,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.cause as { code?: string } | undefined)?.code === 'error.not_found'
+      )
+        return null;
+      throw error;
+    }
+  }
+  async function resumeRequest() {
+    try {
+      const saved = readOperationRequest(sessionStorage, requestScope);
+      if (!saved) return;
+      const previous = await lookupRequest(saved.key);
+      if (!previous) {
+        setError(tr('operation.requestNotFound'));
+        return;
+      }
+      if (
+        previous.moduleId !== module.id ||
+        previous.componentId !== component.id ||
+        (previous.serverId ?? '') !== scope
+      )
+        throw new Error(tr('Результат относится к другому запросу'));
+      const action = component.triggers.find(
+        (t) => t.type === 'manual' && t.action === previous.action,
+      );
+      if (!action) throw new Error(tr('operation.requestActionUnavailable'));
+      const id = String(previous.target?.[action.inputKey ?? 'containerId'] ?? '');
+      const target: Selection = { action, id, row: { id }, input: {} };
+      setSelection(target);
+      void execute(target, previous);
+    } catch (error) {
+      setError(error instanceof Error ? tr(error.message) : tr('Ошибка операции'));
+    }
+  }
   useEffect(() => {
     const abort = new AbortController();
     api<ExtensionConfiguration>(
@@ -340,7 +404,7 @@ function ExtensionComponentView({
       controller.current?.abort();
     };
   }, [module.id, component.id, scope]);
-  async function execute(target: Selection) {
+  async function execute(target: Selection, previous?: ExtensionOperation) {
     if (inflight.current || !config?.enabled) return;
     inflight.current = true;
     setBusy(true);
@@ -358,14 +422,22 @@ function ExtensionComponentView({
       const input = target.action.inputKey
         ? { [target.action.inputKey]: target.id }
         : (target.input ?? {});
-      const op = await api<ExtensionOperation>(
-        componentEndpoint(module.id, component.id, scope, 'operations'),
-        {
-          method: 'POST',
-          body: JSON.stringify({ action: target.action.action, input }),
-          signal: abort.signal,
-        },
-      );
+      setHasPendingRequest(true);
+      const op =
+        previous ??
+        (await operationRequest(
+          sessionStorage,
+          requestScope,
+          (key) => lookupRequest(key, abort.signal),
+          (key) =>
+            api<ExtensionOperation>(requestScope, {
+              method: 'POST',
+              headers: { 'Idempotency-Key': key },
+              body: JSON.stringify({ action: target.action.action, input }),
+              signal: abort.signal,
+            }),
+          abort.signal,
+        ));
       const expected = {
         id: op.id,
         moduleId: module.id,
@@ -384,7 +456,11 @@ function ExtensionComponentView({
         )
           throw new Error(tr('Результат относится к другому объекту'));
         setOperation(current);
-        if (!['pending', 'running'].includes(current.status)) {
+        if (!['pending', 'running', 'verifying'].includes(current.status)) {
+          if (current.status !== 'unknown') {
+            clearOperationRequest(sessionStorage, requestScope);
+            setHasPendingRequest(false);
+          }
           setRevision((n) => n + 1);
           return;
         }
@@ -396,7 +472,8 @@ function ExtensionComponentView({
       }
     } catch (e) {
       if (!abort.signal.aborted) setOperation(null);
-      if (!abort.signal.aborted) setError(e instanceof Error ? e.message : tr('Ошибка операции'));
+      if (!abort.signal.aborted)
+        setError(e instanceof Error ? tr(e.message) : tr('Ошибка операции'));
     } finally {
       clearTimeout(timeout);
       if (!abort.signal.aborted || timedOut) {
@@ -508,6 +585,27 @@ function ExtensionComponentView({
             </button>
           ))}
       </div>
+      {hasPendingRequest && !busy && (
+        <div className="card extension-request-recovery" role="status">
+          <p>{tr('operation.savedRequest')}</p>
+          <div className="button-row">
+            <button className="button" onClick={() => void resumeRequest()}>
+              {tr('operation.resumeRequest')}
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => {
+                clearOperationRequest(sessionStorage, requestScope);
+                setHasPendingRequest(false);
+                setOperation(null);
+                setError('');
+              }}
+            >
+              {tr('operation.acknowledgeObservedState')}
+            </button>
+          </div>
+        </div>
+      )}
       <ModuleDataView
         module={manifest}
         endpoint={componentEndpoint(module.id, component.id, scope, 'data')}
@@ -590,7 +688,11 @@ function ExtensionComponentView({
             ) : null}
             {busy && (
               <>
-                <p role="status">{tr('Операция выполняется…')}</p>
+                <p role="status">
+                  {operation?.status === 'verifying'
+                    ? tr('operation.verifying')
+                    : tr('Операция выполняется…')}
+                </p>
                 <Skeleton />
               </>
             )}

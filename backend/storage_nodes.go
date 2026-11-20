@@ -19,6 +19,8 @@ func (s *sqliteStore) saveNode(ctx context.Context, id string, n *agentNode) err
 	return err
 }
 func (s *sqliteStore) loadNodes(ctx context.Context, servers []server) (map[string]*agentNode, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	out := map[string]*agentNode{}
 	for _, server := range servers {
 		var raw []byte
@@ -78,15 +80,19 @@ func (s *sqliteStore) commitReport(ctx context.Context, id string, n *agentNode,
 		return err
 	}
 	if saveSample {
-		raw, err := json.Marshal(n.Report.Sample)
+		point := n.Report.Sample
+		if len(n.History) > 0 {
+			point = n.History[len(n.History)-1]
+		}
+		raw, err := json.Marshal(point)
 		if err != nil {
 			return err
 		}
-		stamp, err := time.Parse(time.RFC3339Nano, n.Report.Sample.At)
+		stamp, err := time.Parse(time.RFC3339Nano, point.At)
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO metric_samples(server_id,at_ns,body) VALUES(?,?,?) ON CONFLICT DO NOTHING", id, stamp.UnixNano(), raw); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO metric_samples(server_id,at_ns,body) VALUES(?,?,?) ON CONFLICT(server_id,at_ns) DO UPDATE SET body=excluded.body", id, stamp.UnixNano(), raw); err != nil {
 			return err
 		}
 	}

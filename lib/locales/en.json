@@ -571,6 +571,14 @@
   "Restart container (5s grace)": "Restart container (5s grace)",
   "Stop container (5s grace)": "Stop container (5s grace)",
   "operation.pending": "Queued",
+  "operation.verifying": "Verifying observed state",
+  "operation.savedRequest": "A saved request exists. Recover its result first. Retrying will not create another command.",
+  "operation.resumeRequest": "Recover saved operation result",
+  "operation.acknowledgeObservedState": "I checked the observed state. Allow a new operation",
+  "operation.requestStorageInvalid": "The saved request could not be read. Check the observed state before creating a new operation.",
+  "operation.requestExpired": "The safe retry window expired. Check the observed state and explicitly allow a new operation.",
+  "operation.requestNotFound": "Monitor did not find the saved operation. Within 24 hours, the original action can be retried with the same key.",
+  "operation.requestActionUnavailable": "The saved action is no longer available. Check the observed state manually.",
   "operation.running": "Running",
   "operation.succeeded": "Completed",
   "operation.failed": "Failed",
@@ -632,5 +640,10 @@
   "docker.logs": "Read logs of the selected container",
   "docker.control": "Start, restart or stop the selected container",
   "telemetry.read": "Read telemetry of the configured node",
-  "notifications.telegram": "Send Telegram messages to the configured chat"
+  "notifications.telegram": "Send Telegram messages to the configured chat",
+  "Среднее": "Average",
+  "Минимум": "Min",
+  "Максимум": "Max",
+  "Среднее и диапазон min–max": "Average and min–max range",
+  "Наблюдений: {p0}": "Observations: {p0}"
 }

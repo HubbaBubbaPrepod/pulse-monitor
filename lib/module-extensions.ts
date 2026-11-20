@@ -57,6 +57,7 @@ export function configurationUpdate(value: ExtensionConfiguration) {
   };
 }
 export type ExtensionOperation = {
+  target?: Record<string, unknown>;
   id: string;
   moduleId: string;
   componentId: string;

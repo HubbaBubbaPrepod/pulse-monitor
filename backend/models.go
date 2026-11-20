@@ -3,13 +3,14 @@ package main
 import "time"
 
 type sample struct {
-	At       string  `json:"at,omitempty"`
-	CPU      float64 `json:"cpu"`
-	Memory   float64 `json:"memory"`
-	Incoming float64 `json:"incoming"`
-	Outgoing float64 `json:"outgoing"`
-	Read     float64 `json:"read"`
-	Write    float64 `json:"write"`
+	At       string         `json:"at,omitempty"`
+	CPU      float64        `json:"cpu"`
+	Memory   float64        `json:"memory"`
+	Incoming float64        `json:"incoming"`
+	Outgoing float64        `json:"outgoing"`
+	Read     float64        `json:"read"`
+	Write    float64        `json:"write"`
+	Summary  *sampleSummary `json:"summary,omitempty"`
 }
 type process struct {
 	PID       int      `json:"pid"`

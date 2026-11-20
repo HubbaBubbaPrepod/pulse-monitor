@@ -105,6 +105,9 @@ func openSQLite(dir string) (result *sqliteStore, err error) {
 	if err = s.applySchema(ctx); err != nil {
 		return nil, err
 	}
+	// Apply read-only protection in the DSN so every pooled connection receives it.
+	q.Add("_pragma", "query_only(1)")
+	uri.RawQuery = q.Encode()
 	s.reader, err = sql.Open("sqlite", uri.String())
 	if err != nil {
 		return nil, err

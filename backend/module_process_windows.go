@@ -5,14 +5,50 @@ import (
 	"golang.org/x/sys/windows"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 	"unsafe"
 )
+
+var moduleHostJob struct {
+	once   sync.Once
+	handle windows.Handle
+	err    error
+}
+
+// Keep this handle open for the entire host lifetime. The kernel closes it on
+// host death, terminating inherited children even before invocation assignment.
+// Closing it during normal operation would also terminate the host itself.
+func ensureModuleHostJob() error {
+	moduleHostJob.once.Do(func() {
+		job, err := windows.CreateJobObject(nil, nil)
+		if err != nil {
+			moduleHostJob.err = err
+			return
+		}
+		var limits windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+		_, err = windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits)))
+		if err == nil {
+			err = windows.AssignProcessToJobObject(job, windows.CurrentProcess())
+		}
+		if err != nil {
+			windows.CloseHandle(job)
+			moduleHostJob.err = err
+			return
+		}
+		moduleHostJob.handle = job
+	})
+	return moduleHostJob.err
+}
 
 // Suspend before assigning the job: a module must not spawn an untracked
 // descendant between process creation and assignment. Closing the job also
 // removes children left behind by an otherwise successful invocation.
 func runModuleCommand(cmd *exec.Cmd) error {
+	if err := ensureModuleHostJob(); err != nil {
+		return err
+	}
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return err

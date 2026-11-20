@@ -18,6 +18,7 @@ import (
 )
 
 type moduleOperation struct {
+	RequestDigest       string          `json:"requestDigest,omitempty"`
 	Runtime             string          `json:"runtime,omitempty"`
 	ID                  string          `json:"id"`
 	ModuleID            string          `json:"moduleId"`
@@ -47,6 +48,7 @@ type moduleOperation struct {
 
 func publicModuleOperation(op moduleOperation) moduleOperation {
 	op.ConfigurationDigest = ""
+	op.RequestDigest = ""
 	op.Input = nil
 	op.Secrets = nil
 	op.Event = nil
@@ -121,7 +123,7 @@ func (a *app) expireModuleOperations(ops []moduleOperation) error {
 		}
 		if op.Status == "pending" {
 			op.Status = "expired"
-		} else if op.Status == "running" {
+		} else if op.Status == "running" || op.Status == "verifying" {
 			op.Status = "unknown"
 			op.Error = "Operation deadline exceeded; not replayed"
 			if cancel := a.moduleCancels[op.ID]; cancel != nil {
@@ -146,7 +148,7 @@ func (a *app) cancelModuleOperations(module, component, server string, all bool)
 		if op.ModuleID != module || (!all && (op.ComponentID != component || op.ServerID != server)) {
 			continue
 		}
-		if op.Status != "pending" && op.Status != "running" {
+		if op.Status != "pending" && op.Status != "running" && op.Status != "verifying" {
 			continue
 		}
 		if cancel := a.moduleCancels[op.ID]; cancel != nil {
@@ -229,6 +231,9 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 		return op, 403, err
 	}
 	op.ConfigurationDigest = moduleConfigurationDigest(cfg)
+	if len(scheduleKey) > 1 {
+		op.RequestDigest = scheduleKey[1]
+	}
 	if len(scheduleKey) > 0 {
 		digest := sha256.Sum256([]byte(scheduleKey[0]))
 		op.ID = hex.EncodeToString(digest[:])
@@ -259,7 +264,7 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 	}
 	pending := 0
 	for _, old := range ops {
-		if old.Status == "pending" || old.Status == "running" {
+		if old.Status == "pending" || old.Status == "running" || old.Status == "verifying" || (old.Status == "unknown" && old.Mutating && time.Now().Before(old.ExpiresAt.Add(10*time.Minute))) {
 			pending++
 			if op.Mutating && old.Mutating && old.ModuleID == p.ID && old.ComponentID == c.ID && old.ServerID == server {
 				return op, 409, errors.New("Another control operation is pending")
@@ -273,7 +278,7 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 	if len(ops) >= 1000 {
 		removed := false
 		for _, old := range ops {
-			if old.Status != "pending" && old.Status != "running" && (old.Status != "unknown" || time.Now().After(old.ExpiresAt.Add(time.Minute))) {
+			if old.Status != "pending" && old.Status != "running" && old.Status != "verifying" && (old.RequestDigest == "" || time.Now().After(old.CreatedAt.Add(24*time.Hour))) && (old.Status != "unknown" || time.Now().After(old.ExpiresAt.Add(10*time.Minute))) {
 				if os.Remove(a.operationPath(old.ID)) == nil {
 					removed = true
 					break
@@ -300,17 +305,18 @@ func (a *app) queueModuleOperation(p modulePackageV2, c moduleComponentV2, serve
 }
 
 type moduleLease struct {
-	Runtime           string           `json:"runtime,omitempty"`
-	ID                string           `json:"id"`
-	ModuleID          string           `json:"moduleId"`
-	ComponentID       string           `json:"componentId"`
-	Version           string           `json:"version"`
-	SHA256            string           `json:"sha256"`
-	Mutating          bool             `json:"mutating"`
-	Invocation        moduleInvocation `json:"invocation"`
-	ExpiresAt         time.Time        `json:"expiresAt"`
-	SecretFields      []string         `json:"secretFields"`
-	SecretInputFields []string         `json:"secretInputFields"`
+	ConfigurationDigest string           `json:"configurationDigest,omitempty"`
+	Runtime             string           `json:"runtime,omitempty"`
+	ID                  string           `json:"id"`
+	ModuleID            string           `json:"moduleId"`
+	ComponentID         string           `json:"componentId"`
+	Version             string           `json:"version"`
+	SHA256              string           `json:"sha256"`
+	Mutating            bool             `json:"mutating"`
+	Invocation          moduleInvocation `json:"invocation"`
+	ExpiresAt           time.Time        `json:"expiresAt"`
+	SecretFields        []string         `json:"secretFields"`
+	SecretInputFields   []string         `json:"secretInputFields"`
 }
 
 func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLease, error) {
@@ -371,7 +377,7 @@ func (a *app) claimModuleOperation(op moduleOperation, target string) (moduleLea
 	if input == nil {
 		input = map[string]any{}
 	}
-	lease = moduleLease{ID: op.ID, ModuleID: p.ID, ComponentID: c.ID, Version: p.Version, SHA256: binary.SHA256, Mutating: op.Mutating, Invocation: moduleInvocation{Protocol: 2, ID: op.ID, ServerID: op.ServerID, Trigger: op.Trigger, Action: op.Action, Config: cfg.Config, Input: input, State: state, Grants: cfg.Grants, Event: op.Event}}
+	lease = moduleLease{ConfigurationDigest: op.ConfigurationDigest, ID: op.ID, ModuleID: p.ID, ComponentID: c.ID, Version: p.Version, SHA256: binary.SHA256, Mutating: op.Mutating, Invocation: moduleInvocation{Protocol: 2, ID: op.ID, ServerID: op.ServerID, Trigger: op.Trigger, Action: op.Action, Config: cfg.Config, Input: input, State: state, Grants: cfg.Grants, Event: op.Event}}
 	if c.Runtime == "wasip1" {
 		lease.Runtime = "wasip1"
 	}
@@ -477,6 +483,7 @@ func (a *app) finishModuleOperation(op moduleOperation, out moduleInvocationResu
 }
 
 func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/module-operation-request", a.moduleRequestStatus)
 	mux.HandleFunc("POST /api/extensions/{module}/components/{component}/operations", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Action string         `json:"action"`
@@ -499,7 +506,7 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			apiError(w, 400, "Invalid component scope")
 			return
 		}
-		op, status, err := a.queueModuleOperation(p, c, server, "manual", input.Action, input.Input, nil)
+		op, status, err := a.queueManualModuleOperation(p, c, server, input.Action, input.Input, r.Header.Get("Idempotency-Key"))
 		if err != nil {
 			apiError(w, status, err.Error())
 			return
@@ -530,7 +537,7 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			return
 		}
 		for _, op := range ops {
-			if op.Location == "agent" && op.ServerID == r.PathValue("id") && op.Status == "running" && time.Now().Before(op.ExpiresAt) {
+			if op.Location == "agent" && op.ServerID == r.PathValue("id") && (op.Status == "running" || op.Status == "verifying") && time.Now().Before(op.ExpiresAt) {
 				writeJSON(w, 200, []moduleLease{})
 				return
 			}
@@ -570,7 +577,7 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			return
 		}
 		_, _, _, err = a.authorizedOperation(op)
-		writeJSON(w, 200, map[string]bool{"allowed": err == nil && op.Status == "running" && time.Now().Before(op.ExpiresAt)})
+		writeJSON(w, 200, map[string]any{"allowed": err == nil && (op.Status == "running" || op.Status == "verifying") && time.Now().Before(op.ExpiresAt), "reconcileAllowed": err == nil && (op.Status == "running" || op.Status == "verifying" || op.Status == "unknown") && time.Now().Before(op.ExpiresAt.Add(10*time.Minute)), "binding": map[string]any{"id": op.ID, "moduleId": op.ModuleID, "componentId": op.ComponentID, "version": op.Version, "serverId": op.ServerID, "action": op.Action, "target": op.Target, "sha256": op.SHA256, "runtime": op.Runtime, "configurationDigest": op.ConfigurationDigest}})
 	})
 	mux.HandleFunc("GET /api/agent/{id}/extensions/{module}/{component}/binary", func(w http.ResponseWriter, r *http.Request) {
 		if !a.agentAuthorized(r) {
@@ -600,6 +607,7 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 		var report struct {
 			Result moduleInvocationResult `json:"result"`
 			Failed bool                   `json:"failed"`
+			Phase  string                 `json:"phase,omitempty"`
 		}
 		d := json.NewDecoder(r.Body)
 		d.DisallowUnknownFields()
@@ -614,12 +622,36 @@ func (a *app) moduleOperationRoutes(mux *http.ServeMux) {
 			apiError(w, 404, "Operation not found")
 			return
 		}
-		if op.Status != "running" && op.Status != "unknown" {
+		if op.Status != "running" && op.Status != "verifying" && op.Status != "unknown" {
 			writeJSON(w, 200, map[string]bool{"accepted": true})
 			return
 		}
-		if time.Now().After(op.ExpiresAt.Add(time.Minute)) {
+		if time.Now().After(op.ExpiresAt.Add(10 * time.Minute)) {
 			apiError(w, 409, "Operation receipt expired")
+			return
+		}
+
+		if report.Phase != "" {
+			if report.Phase != "verifying" || report.Failed || report.Result.Protocol != 0 || len(report.Result.Data) > 0 {
+				apiError(w, 400, "Invalid operation phase")
+				return
+			}
+			if _, _, _, err = a.authorizedOperation(op); err != nil {
+				apiError(w, 403, "Component permission revoked")
+				return
+			}
+			if op.Status == "unknown" || !time.Now().Before(op.ExpiresAt) {
+				writeJSON(w, 200, map[string]bool{"accepted": true})
+				return
+			}
+			op.Status = "verifying"
+			op.Error = ""
+			op.FinishedAt = time.Time{}
+			if err = a.saveModuleOperation(op); err != nil {
+				apiError(w, 500, "Could not persist operation phase")
+				return
+			}
+			writeJSON(w, 200, map[string]bool{"accepted": true})
 			return
 		}
 		var runErr error

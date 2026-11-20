@@ -5,7 +5,7 @@ import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { ArrowLeftRight } from 'lucide-react';
 import { formatDateTime, formatNumber } from '@/lib/i18n';
-import { type Sample } from '@/lib/data';
+import { type Sample, type SampleField, sampleMetric } from '@/lib/data';
 import { useNodeMonitor } from './provider';
 import { Panel } from './ui';
 import { api, type Snapshot } from '@/lib/monitor';
@@ -17,7 +17,6 @@ const W = 780,
   BOTTOM = 30;
 const graphWidth = W - LEFT - RIGHT,
   graphHeight = H - TOP - BOTTOM;
-type Field = Exclude<keyof Sample, 'at'>;
 const ranges = [
   { label: '15 мин', minutes: 15 },
   { label: '1 ч', minutes: 60 },
@@ -140,7 +139,7 @@ export function Chart({
   const area = useRef<SVGPathElement>(null);
   const prior = useRef<[string, string] | null>(null);
   const id = useId();
-  const fields: [Field, Field] =
+  const fields: [SampleField, SampleField] =
     mode === 'network'
       ? ['incoming', 'outgoing']
       : mode === 'disk'
@@ -183,10 +182,27 @@ export function Chart({
       : periodData?.serverId === server.id && periodData.period === period
         ? periodData.samples
         : [];
-  const first = samples.map((s) => s[fields[0]]),
-    second = samples.map((s) => s[fields[1]]);
+  const metrics = fields.map((field) => samples.map((s) => sampleMetric(s, field)));
+  const first = metrics[0].map((s) => s.value),
+    second = metrics[1].map((s) => s.value);
   const chartMax =
-    mode === 'system' ? 100 : Math.max(1, Math.ceil(Math.max(...first, ...second, 1) / 25) * 25);
+    mode === 'system'
+      ? 100
+      : Math.max(1, Math.ceil(Math.max(...metrics.flat().map((s) => s.max), 1) / 25) * 25);
+  const envelopes = metrics.map((series) =>
+    [
+      ...points(
+        series.map((s) => s.max),
+        chartMax,
+      ),
+      ...points(
+        series.map((s) => s.min),
+        chartMax,
+      ).reverse(),
+    ]
+      .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
+      .join(' '),
+  );
   const d1 = path(first, chartMax) || `M${LEFT},${H - BOTTOM}`,
     d2 = path(second, chartMax) || `M${LEFT},${H - BOTTOM}`,
     closing = ` L${W - RIGHT},${H - BOTTOM} L${LEFT},${H - BOTTOM} Z`;
@@ -417,6 +433,19 @@ export function Chart({
               fill={`url(#${id})`}
               style={{ visibility: visible[0] ? 'visible' : 'hidden' }}
             />
+            {fields.map((field, i) => (
+              <polygon
+                key={`${field}-range`}
+                points={envelopes[i]}
+                fill={i ? 'var(--chart-secondary)' : 'var(--chart-primary)'}
+                fillOpacity={0.16}
+                stroke={i ? 'var(--chart-secondary)' : 'var(--chart-primary)'}
+                strokeOpacity={0.35}
+                strokeWidth={0.65}
+                vectorEffect="non-scaling-stroke"
+                style={{ visibility: visible[i] ? 'visible' : 'hidden' }}
+              />
+            ))}
             <path
               ref={primary}
               d={d1}
@@ -453,7 +482,9 @@ export function Chart({
                         <circle
                           key={field}
                           cx={cx}
-                          cy={TOP + graphHeight * (1 - active[field] / chartMax)}
+                          cy={
+                            TOP + graphHeight * (1 - sampleMetric(active, field).value / chartMax)
+                          }
                           r={4}
                           fill={i ? 'var(--chart-secondary)' : 'var(--chart-primary)'}
                           stroke="var(--surface)"
@@ -472,19 +503,42 @@ export function Chart({
                 className="chart-tooltip"
                 style={{ left: `${Math.min(73, Math.max(8, (cx / W) * 100))}%` }}
               >
-                <span className="mono">{trText(timeAt(cursor!))}</span>
+                <span className="mono">
+                  {active.summary && active.summary.count > 1
+                    ? `${formatDateTime(active.summary.start, undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })} – ${formatDateTime(active.summary.end, undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                    : active.at
+                      ? formatDateTime(active.at, undefined, {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })
+                      : trText(timeAt(cursor!))}
+                </span>
+                {active.summary && active.summary.count > 1 && (
+                  <span>{tr('Наблюдений: {p0}', { p0: formatNumber(active.summary.count) })}</span>
+                )}
                 {trText(
                   fields.map((field, i) => (
                     <div key={field}>
-                      <span>{trText(names[i])}</span>
+                      <span>
+                        {trText(names[i])}
+                        {sampleMetric(active, field).count > 1 ? ` · ${tr('Среднее')}` : ''}
+                      </span>
                       <strong>
                         {trText(
-                          formatNumber(active[field], undefined, {
+                          formatNumber(sampleMetric(active, field).value, undefined, {
                             minimumFractionDigits: 1,
                             maximumFractionDigits: 1,
                           }),
                         )}
                         {trText(unit)}
+                        {sampleMetric(active, field).count > 1 && (
+                          <small style={{ display: 'block', fontWeight: 400 }}>
+                            {tr('Минимум')} {formatNumber(sampleMetric(active, field).min)} –{' '}
+                            {tr('Максимум')} {formatNumber(sampleMetric(active, field).max)}
+                            {unit}
+                          </small>
+                        )}
                       </strong>
                     </div>
                   )),
@@ -496,7 +550,7 @@ export function Chart({
         <div className="chart-foot">
           <span>
             {trText(
-              mode === 'system' ? tr('Использование ресурсов, %') : tr('Скорость передачи, MB/s'),
+              `${mode === 'system' ? tr('Использование ресурсов, %') : tr('Скорость передачи, MB/s')} · ${tr('Среднее и диапазон min–max')}`,
             )}
           </span>
           <button className="text-button" onClick={() => setShowTable((s) => !s)}>
@@ -535,21 +589,37 @@ export function Chart({
                           </td>
                           <td>
                             {trText(
-                              formatNumber(sample[fields[0]], undefined, {
+                              formatNumber(sampleMetric(sample, fields[0]).value, undefined, {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
                               }),
                             )}
                             {trText(unit)}
+                            {sampleMetric(sample, fields[0]).count > 1 && (
+                              <small style={{ display: 'block' }}>
+                                {tr('Минимум')} {formatNumber(sampleMetric(sample, fields[0]).min)}{' '}
+                                – {tr('Максимум')}{' '}
+                                {formatNumber(sampleMetric(sample, fields[0]).max)}
+                                {unit}
+                              </small>
+                            )}
                           </td>
                           <td>
                             {trText(
-                              formatNumber(sample[fields[1]], undefined, {
+                              formatNumber(sampleMetric(sample, fields[1]).value, undefined, {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
                               }),
                             )}
                             {trText(unit)}
+                            {sampleMetric(sample, fields[1]).count > 1 && (
+                              <small style={{ display: 'block' }}>
+                                {tr('Минимум')} {formatNumber(sampleMetric(sample, fields[1]).min)}{' '}
+                                – {tr('Максимум')}{' '}
+                                {formatNumber(sampleMetric(sample, fields[1]).max)}
+                                {unit}
+                              </small>
+                            )}
                           </td>
                         </tr>
                       )),

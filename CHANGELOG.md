@@ -2,6 +2,12 @@
 
 # Changelog
 
+## [0.7.2] — 2026-11-20
+
+- Add idempotent manual requests and read-only reconciliation for brokered Docker commands.
+- Bound SQLite startup reads, enforce read-only queries, and preserve telemetry peaks in ten-second buckets.
+- Clean up native child process trees after host termination.
+
 ## [0.7.1] — 2026-11-18
 
 - Update Next.js to 16.4.6 and the TypeScript ESLint dependency chain to fix known security advisories; keep npm locks portable across Windows and Linux.
